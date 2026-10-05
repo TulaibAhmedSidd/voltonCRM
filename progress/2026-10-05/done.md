@@ -81,3 +81,13 @@
   - Added pictures (`public/guide/manager-dashboard.png`, `public/guide/agent-phone.png`) and standalone reference manual at `docs/guide/EMPLOYEE-MANAGER-GUIDE.md`.
   - Added App Guide to sidebar and mobile navigation.
 - **Verification**: `npm run lint` and `npm run typecheck` passed with 0 errors; all 238 unit and database tests passed.
+
+## 21:45 PKT — Commit, Push, and Demo Data Wipe
+- Committed all features to `main` branch and pushed to GitHub: `https://github.com/TulaibAhmedSidd/voltonCRM.git`.
+- Wiped all demo/test data:
+  - Preserved owner account `tulaib@gmail.com` (Super Admin).
+  - Deleted 19 demo users (including admin, bilal, sana, and agent/field test accounts).
+  - Deleted all demo teams, leads (61), contacts (61), visits (6), attempts (97), follow-ups (31), activities (324), audit logs, and messages.
+  - Reset lead counter sequence so real customer leads start fresh at `VL-00001`.
+  - Reset Google Sheet cursor in settings.
+- Departments (`TRADING`, `INSTALLATION`) and appearance/theme settings kept intact.
