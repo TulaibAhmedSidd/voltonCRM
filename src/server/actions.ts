@@ -17,7 +17,7 @@ import { isObjectId, loadLeadFor, loadManagedUser, safeNext } from '@/server/aut
 import { isAdminRole, isManagerOrAdmin } from '@/server/auth/scope'
 import { acceptLead, autoAssign, checkIn, checkOut, drainQueue, manualAssign, managersOf, resetAssignment, toggleBreak } from '@/server/services/assignment'
 import { logOutcome, reviewAttempt, tapAttempt } from '@/server/services/attempts'
-import { errorState, logActivity, notify, oid, UserError, type ActionState } from '@/server/services/common'
+import { cancelJobs, errorState, logActivity, notify, oid, UserError, type ActionState } from '@/server/services/common'
 import { ingestLead } from '@/server/services/ingest'
 import { changeStage, reopenLead, transferLead } from '@/server/services/leads'
 import { clear, hit, isBlocked } from '@/server/services/rate-limit'
@@ -573,6 +573,55 @@ export async function updateTeamSettingsAction(_prev: ActionState, fd: FormData)
     if (!settings.paused) await drainQueue(team._id)
     refresh()
     return { ok: true, message: 'Saved' }
+  })
+}
+
+/** Toggle auto-assign leads on or off from the dashboard. When true, leads are auto-assigned without manual intervention. */
+export async function toggleAutoAssignAction(teamId: string, autoAssign: boolean): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const team = isObjectId(teamId) ? await Team.findById(teamId) : null
+    if (!team || (actor.role === 'manager' && String(team.departmentId) !== actor.departmentId)) {
+      return { ok: false, message: 'Not allowed' }
+    }
+    const before = { paused: team.paused, managerWindowMin: team.managerWindowMin }
+    if (autoAssign) {
+      team.set({ paused: false, managerWindowMin: 0 })
+      await team.save()
+      await AuditLog.create({
+        entity: 'team',
+        entityId: team._id,
+        action: 'update',
+        before,
+        after: { paused: false, managerWindowMin: 0, autoAssign: true },
+        actorId: oid(actor.id),
+      })
+      // If any leads were waiting in manager_window, release them to waiting and cancel manager timer
+      const managerWindowLeads = await Lead.find({ teamId: team._id, status: 'open', 'assignment.state': 'manager_window' }).select('_id').lean()
+      if (managerWindowLeads.length > 0) {
+        await cancelJobs({ leadId: { $in: managerWindowLeads.map((l) => l._id) }, kind: 'manager_window_end' })
+        await Lead.updateMany({ _id: { $in: managerWindowLeads.map((l) => l._id) } }, { $set: { 'assignment.state': 'waiting' } })
+      }
+      const assigned = await drainQueue(team._id)
+      refresh()
+      return {
+        ok: true,
+        message: assigned > 0 ? `Auto-assign active — ${assigned} lead(s) assigned to team` : 'Auto-assign active — incoming leads will be assigned automatically',
+      }
+    } else {
+      team.set({ paused: true })
+      await team.save()
+      await AuditLog.create({
+        entity: 'team',
+        entityId: team._id,
+        action: 'update',
+        before,
+        after: { paused: true, autoAssign: false },
+        actorId: oid(actor.id),
+      })
+      refresh()
+      return { ok: true, message: 'Auto-assign paused — leads will wait for manual assignment' }
+    }
   })
 }
 

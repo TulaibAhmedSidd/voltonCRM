@@ -1,7 +1,9 @@
+import { Suspense } from 'react'
 import type { Metadata, Viewport } from 'next'
 import { Manrope, Sora } from 'next/font/google'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ServiceWorker } from '@/components/common/pwa'
+import { NavigationProgressBar } from '@/components/common/progress-bar'
 import { en } from '@/i18n/en'
 import { BRAND_HEX } from '@/styles/brand-colors'
 import { themeCss } from '@/styles/runtime-theme'
@@ -47,6 +49,9 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
     <html lang="en" dir="ltr" className={`${manrope.variable} ${sora.variable} h-full antialiased`}>
       <body className="min-h-full">
         {css ? <style id="brand-theme">{css}</style> : null}
+        <Suspense fallback={null}>
+          <NavigationProgressBar />
+        </Suspense>
         <TooltipProvider>{children}</TooltipProvider>
         <ServiceWorker />
       </body>

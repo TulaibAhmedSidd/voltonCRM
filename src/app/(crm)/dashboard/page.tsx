@@ -12,12 +12,13 @@ import { FollowUpItem } from '@/components/crm/follow-up-item'
 import { KpiGrid } from '@/components/crm/kpi-grid'
 import { LeadCard } from '@/components/crm/lead-card'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
+import { AutoAssignToggle } from '@/components/crm/auto-assign-toggle'
 import { VISIT_STATUS_META } from '@/domain/ui-maps'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { acceptLeadAction, checkInAction, checkOutAction, toggleBreakAction } from '@/server/actions'
 import { getAttendance } from '@/server/services/assignment'
-import { getKpis, getTeamBoard, listFollowUps, listLeads, listVisits } from '@/server/services/queries'
+import { getKpis, getTeamBoard, getTeams, listFollowUps, listLeads, listVisits } from '@/server/services/queries'
 
 export const metadata = { title: 'Dashboard' }
 
@@ -104,13 +105,28 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
     )
   }
 
-  const [kpis, board, queue, followUps] = await Promise.all([getKpis(user), getTeamBoard(user), listLeads(user, { view: 'unassigned' }), listFollowUps(user)])
+  const [kpis, board, queue, followUps, teams] = await Promise.all([
+    getKpis(user),
+    getTeamBoard(user),
+    listLeads(user, { view: 'unassigned' }),
+    listFollowUps(user),
+    getTeams(user),
+  ])
+  const team = teams.find((t) => t.departmentId === user.departmentId) ?? teams[0]
+  const isAutoAssign = team ? !team.settings.paused && team.settings.managerWindowMin === 0 : false
   const overdue = followUps.filter((f) => f.isOverdue)
   const checkedIn = board.filter((m) => m.attendance === 'checked_in').length
   return (
     <>
       <PageHeader title={greeting} description={user.role === 'admin' || user.role === 'super_admin' ? 'Whole company' : `${user.departmentCode === 'TRADING' ? 'Trading' : 'Installation'} department`} />
       {noticeEl}
+      {team ? (
+        <AutoAssignToggle
+          teamId={team.id}
+          initialEnabled={isAutoAssign}
+          teamName={user.role === 'admin' || user.role === 'super_admin' ? team.name : undefined}
+        />
+      ) : null}
       <div className="grid gap-3 sm:grid-cols-3">
         <ActionTile href="/leads?view=unassigned" label="Leads waiting to be assigned" icon={UserPlus} count={queue.total} tone="warning" />
         <ActionTile href="/follow-ups" label="Overdue follow-ups" icon={AlarmClock} count={overdue.length} tone="danger" />

@@ -29,6 +29,7 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | ActionForm (client) | action-form.tsx | `action, onSuccess?, children` | Every form posting to a Server Action (`useActionState`, shows errors) |
 | TextField / TextAreaField / SelectField / CheckboxField | fields.tsx | `label, name, …input props` | Labelled ≥ 44 px form fields |
 | ServiceWorker / InstallPrompt (client) | pwa.tsx | — | SW registration (root layout) and the "Install app" banner (Android button, iPhone Share steps) |
+| NavigationProgressBar (client) | progress-bar.tsx | — | Top loading progress bar providing instant visual feedback on route changes |
 | AppShell (client) | app-shell.tsx | `role, userName, actions?, children` | Signed-in layout: sidebar (lg+), top bar + bottom nav (phones). Items from `src/domain/navigation.ts` |
 
 ## Layer 3 — CRM (`src/components/crm`)
@@ -51,6 +52,8 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | NotificationBell (client) | notification-bell.tsx | — polls `/api/me/poll` every 20 s |
 | QuickAddLead (client) | quick-add-lead.tsx | — manual lead sheet |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |
+| AutoAssignToggle (client) | auto-assign-toggle.tsx | `teamId, initialEnabled, teamName?` — dashboard toggle for auto/manual lead dispatch |
+| PipelineBoard (client) | pipeline-board.tsx | `stages, leads` — drag horizontal scroll with grab cursor for desktop & mobile Kanban |
 
 View-model types: `src/domain/view-models.ts`. Demo data: `src/dev/fixtures.ts`.
 

@@ -14,7 +14,7 @@ declare global {
 export function connectDb(uri?: string): Promise<typeof mongoose> {
   if (!globalThis.__voltonMongoose) {
     globalThis.__voltonMongoose = mongoose
-      .connect(uri ?? requireMongoUri(), { maxPoolSize: 10, maxIdleTimeMS: 5_000, serverSelectionTimeoutMS: 10_000 })
+      .connect(uri ?? requireMongoUri(), { maxPoolSize: 10, maxIdleTimeMS: 30_000, serverSelectionTimeoutMS: 10_000 })
       .then((connected) => {
         attachDatabasePool(connected.connection.getClient())
         return connected

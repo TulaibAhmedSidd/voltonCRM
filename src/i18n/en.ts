@@ -216,6 +216,7 @@ export const en = {
     team: 'Team',
     review: 'Proof review',
     settings: 'Settings',
+    guide: 'App Guide',
   },
   pwa: {
     installTitle: 'Install the Volton app',

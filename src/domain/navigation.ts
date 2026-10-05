@@ -1,4 +1,4 @@
-import { Building2, CalendarClock, LayoutDashboard, List, MapPin, Settings, ShieldCheck, SquareKanban, Users, type LucideIcon } from 'lucide-react'
+import { BookOpen, Building2, CalendarClock, LayoutDashboard, List, MapPin, Settings, ShieldCheck, SquareKanban, Users, type LucideIcon } from 'lucide-react'
 import type { Role } from '@/domain/constants'
 import { en } from '@/i18n/en'
 
@@ -21,6 +21,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/review', label: en.nav.review, icon: ShieldCheck, roles: ['super_admin', 'admin', 'manager'], mobile: false },
   { href: '/settings', label: en.nav.settings, icon: Settings, roles: ['super_admin', 'admin', 'manager'], mobile: false },
   { href: '/admin', label: en.nav.admin, icon: Building2, roles: ['super_admin', 'admin'], mobile: false },
+  { href: '/guide', label: en.nav.guide, icon: BookOpen, roles: ['super_admin', 'admin', 'manager', 'agent', 'field_agent'], mobile: false },
 ]
 
 export function navItemsFor(role: Role): NavItem[] {

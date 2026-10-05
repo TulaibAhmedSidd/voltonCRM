@@ -13,3 +13,8 @@
 ## Build next
 - Install test on real Android and iPhone after deploy.
 - Phase 2 items left open: check-in location / Wi-Fi rule, break limits, automatic take-back of uncontacted leads, holidays, a full Content-Security-Policy, Coexistence company numbers.
+
+## 21:15 PKT Update
+1. Push git commits so Vercel builds the new features (Auto-assign toggle, Pipeline drag scroll, progress bar, performance speedup, and in-app guide).
+2. Test dashboard toggle on Vercel (`volton-crm.vercel.app/dashboard`).
+3. Have staff review `/guide` on their mobile phones in English or Urdu.

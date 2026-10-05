@@ -63,3 +63,21 @@
   - the Dead → dispute → re-open path
 - `tests/db/security.test.ts` covers the loopholes; `tests/db/api-routes.test.ts` covers every API route and the proxy.
 - The browser walkthrough on a phone-sized screen confirmed the same flow and the colour change.
+
+## 21:15 PKT — Dashboard Auto-Assign Toggle, Pipeline Drag Scroll, App Speedup, and Bilingual Guide
+- **Dashboard Auto-Assign Toggle**:
+  - Added `toggleAutoAssignAction` in `src/server/actions.ts` and `AutoAssignToggle` client component on `/dashboard`.
+  - When toggled ON: unpauses team, sets manager window to 0, cancels waiting timers, and immediately auto-assigns waiting leads to checked-in agents via `drainQueue()`.
+  - When toggled OFF: pauses auto-assign so new leads wait for manager's manual assignment.
+- **Pipeline Kanban Drag-to-Scroll**:
+  - Added `PipelineBoard` with `cursor-grab` and `active:cursor-grabbing` on desktop, smooth touch scrolling on mobile, mouse wheel horizontal conversion, and drag-click interceptor.
+- **App Performance & Navigation Progress Bar**:
+  - Added zero-dependency `NavigationProgressBar` with primary amber glow mounted globally in `RootLayout`.
+  - Added `src/app/(crm)/loading.tsx` skeleton fallback for instant visual feedback on route changes.
+  - Increased MongoDB `maxIdleTimeMS` to 30,000 ms to avoid connection drops between clicks.
+  - Added link prefetching in `AppShell`.
+- **Complete Operational Guide in English & Urdu**:
+  - Built interactive in-app guide at `/guide` with language tabs (English / اردو) and baby steps for Call Agents, Field Agents, and Managers.
+  - Added pictures (`public/guide/manager-dashboard.png`, `public/guide/agent-phone.png`) and standalone reference manual at `docs/guide/EMPLOYEE-MANAGER-GUIDE.md`.
+  - Added App Guide to sidebar and mobile navigation.
+- **Verification**: `npm run lint` and `npm run typecheck` passed with 0 errors; all 238 unit and database tests passed.
