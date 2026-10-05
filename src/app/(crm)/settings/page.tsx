@@ -8,10 +8,10 @@ import { UserAdminList } from '@/components/crm/user-admin-list'
 import type { Role } from '@/domain/constants'
 import { en } from '@/i18n/en'
 import { requireRole } from '@/server/auth/session'
-import { isAdminRole } from '@/server/auth/scope'
+import { isAdminRole, leadScope } from '@/server/auth/scope'
 import { connectDb } from '@/server/db/connection'
-import { SheetRow } from '@/server/db/models'
-import { createUserAction, pullSheetAction, saveSheetConfigAction, saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
+import { DocumentFile, Lead, SheetRow } from '@/server/db/models'
+import { createUserAction, purgeDataAction, pullSheetAction, saveSheetConfigAction, saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
 import { listDepartments, listUsers } from '@/server/services/queries'
 import { getSetting } from '@/server/services/settings'
 import { previewSheet } from '@/server/services/sheet'
@@ -31,7 +31,16 @@ export default async function SettingsPage() {
   const user = await requireRole('admin', 'manager')
   const admin = isAdminRole(user.role)
   await connectDb()
-  const [users, departments, sheet, hours, theme] = await Promise.all([listUsers(user), listDepartments(), getSetting('sheet_config'), getSetting('working_hours'), getSetting('theme')])
+  const scope = leadScope(user)
+  const [users, departments, sheet, hours, theme, screenshotCount, junkLeadCount] = await Promise.all([
+    listUsers(user),
+    listDepartments(),
+    getSetting('sheet_config'),
+    getSetting('working_hours'),
+    getSetting('theme'),
+    DocumentFile.countDocuments({ category: 'screenshot', deletedAt: null }),
+    Lead.countDocuments({ $and: [scope, { status: { $in: ['unreachable', 'junk'] } }] }),
+  ])
   const [preview, rowStats, failedRows] = admin
     ? await Promise.all([
         sheet.spreadsheetId ? previewSheet().catch((e: Error) => e.message) : Promise.resolve(null),
@@ -43,7 +52,7 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <PageHeader title="Settings" description={user.role === 'manager' ? 'Add your call agents and field agents. New people choose their own password at first sign-in.' : undefined} />
+      <PageHeader title="Settings" description={user.role === 'manager' ? 'Add your call agents and field agents, and manage department data maintenance.' : undefined} />
 
       <SectionCard title="Users" description="New users must choose their own password at first sign-in. Call agents join their department's assignment order automatically.">
         <div className="grid gap-6 lg:grid-cols-2">
@@ -63,6 +72,69 @@ export default async function SettingsPage() {
               Add user
             </Button>
           </ActionForm>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Data Maintenance & Storage Clean-up"
+        description="Safely clean up screenshot attachments, archive dead/junk inquiries, or clear sync errors to keep the system fast and storage light."
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Screenshot Proofs</p>
+                <StatusBadge label={`${screenshotCount} stored`} tone="neutral" size="sm" />
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Purge screenshot file attachments from call attempts to free up file storage. Call logs, timestamps, and customer outcomes remain preserved.
+              </p>
+            </div>
+            <ActionForm action={purgeDataAction} className="mt-4">
+              <input type="hidden" name="target" value="screenshots" />
+              <Button type="submit" variant="outline" size="touch" className="w-full">
+                Purge Screenshots
+              </Button>
+            </ActionForm>
+          </div>
+
+          <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Dead & Junk Leads</p>
+                <StatusBadge label={`${junkLeadCount} leads`} tone="neutral" size="sm" />
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Archive leads with status Unreachable or Junk that have exhausted contact attempts. Keeps active pipelines clean and unburdened.
+              </p>
+            </div>
+            <ActionForm action={purgeDataAction} className="mt-4">
+              <input type="hidden" name="target" value="junk_leads" />
+              <Button type="submit" variant="outline" size="touch" className="w-full">
+                Archive Dead Leads
+              </Button>
+            </ActionForm>
+          </div>
+
+          {admin ? (
+            <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold">Failed Sheet Rows</p>
+                  <StatusBadge label={`${failedRows.length} failed`} tone={failedRows.length > 0 ? 'danger' : 'neutral'} size="sm" />
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Reset failed Google Sheet import records so the next sync attempt can re-parse and retry ingesting them.
+                </p>
+              </div>
+              <ActionForm action={purgeDataAction} className="mt-4">
+                <input type="hidden" name="target" value="sheet_errors" />
+                <Button type="submit" variant="outline" size="touch" className="w-full">
+                  Reset Failed Rows
+                </Button>
+              </ActionForm>
+            </div>
+          ) : null}
         </div>
       </SectionCard>
 

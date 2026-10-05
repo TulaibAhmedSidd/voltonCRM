@@ -16,7 +16,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/leads', label: en.nav.leads, icon: List, roles: ['super_admin', 'admin', 'manager', 'agent'], mobile: true },
   { href: '/follow-ups', label: en.nav.followUps, icon: CalendarClock, roles: ['manager', 'agent'], mobile: true },
   { href: '/visits', label: en.nav.visits, icon: MapPin, roles: ['super_admin', 'admin', 'manager', 'field_agent'], mobile: true },
-  { href: '/pipeline', label: en.nav.pipeline, icon: SquareKanban, roles: ['super_admin', 'admin', 'manager'], mobile: true },
+  { href: '/pipeline', label: en.nav.pipeline, icon: SquareKanban, roles: ['super_admin', 'admin', 'manager', 'agent'], mobile: false },
   { href: '/team', label: en.nav.team, icon: Users, roles: ['super_admin', 'admin', 'manager'], mobile: false },
   { href: '/review', label: en.nav.review, icon: ShieldCheck, roles: ['super_admin', 'admin', 'manager'], mobile: false },
   { href: '/settings', label: en.nav.settings, icon: Settings, roles: ['super_admin', 'admin', 'manager'], mobile: false },

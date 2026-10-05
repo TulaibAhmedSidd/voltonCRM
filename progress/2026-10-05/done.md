@@ -91,3 +91,27 @@
   - Reset lead counter sequence so real customer leads start fresh at `VL-00001`.
   - Reset Google Sheet cursor in settings.
 - Departments (`TRADING`, `INSTALLATION`) and appearance/theme settings kept intact.
+
+## 22:25 PKT — End-to-End Walkthrough Automation, Screenshots, Urdu Video Narration & WhatsApp API Specs
+- **Automated Playwright Walkthrough & Screenshot Suite (`scripts/record-walkthrough.ts`)**:
+  - Script simulated real browser sessions across 3 roles capturing 31 retina-quality screenshots into `public/guide/walkthrough/`:
+    - **Super Admin**: Login, Dashboard, `/admin` company view, creation of Trading Manager (`Hamza Farooq`) and Installation Manager (`Zubair Khan`).
+    - **Trading Manager**: First login, mandatory forced password change (`/change-password`), department dashboard, creation of Call Agent (`Bilal Ahmed`), team round-robin ordering & SLA timers (`/team`), quick-adding lead (`Tariq Mehmood`), and manual agent assignment.
+    - **Employee (Call Agent)**: First login, mandatory forced password reset, dashboard before check-in, shift check-in (starting duty), 5-minute lead accept timer, masked customer phone & call attempt audit logging, and horizontal drag pipeline.
+- **Urdu Video Walkthrough Generator (`scripts/generate_guide_videos.py`)**:
+  - Leveraged `edge-tts` with high-fidelity Pakistani Urdu voice `ur-PK-AsadNeural` (slow rate: `-12%`) and `imageio_ffmpeg`.
+  - Generated 3 synchronized MP4 videos with clear Urdu voiceover explaining the why and what of every action:
+    - `public/guide/volton-crm-manager-guide-urdu.mp4` (~3.93 MB, 3 mins): Manager & Super Admin walkthrough.
+    - `public/guide/volton-crm-employee-guide-urdu.mp4` (~2.65 MB, 2.5 mins): Employee & Call Agent walkthrough.
+    - `public/guide/volton-crm-complete-guide-urdu.mp4` (~6.59 MB, 5.5 mins): Combined master guide.
+- **WhatsApp Cloud API Integration Specification**:
+  - Generated dedicated infographic slide `public/guide/walkthrough/32_whatsapp_api_future_features.png`.
+  - Detailed the 4 future features that unlock once Meta credentials are plugged in: Automated Meta CTWA ad ingestion, live 2-way in-CRM chat panel, verified template auto-responses, and 100% lead leakage protection.
+- **Enhanced In-App Guide (`/guide`) & Documentation**:
+  - Integrated native HTML5 video players on `/guide` for instant playback on mobile and desktop.
+  - Added bilingual tabs (English & اردو) with baby steps and high-resolution screenshot cards.
+  - Authored comprehensive offline operational manual at `docs/guide/STEP-BY-STEP-VISUAL-WALKTHROUGH.md`.
+- **Verification**:
+  - `npm run lint` & `npm run typecheck` passed with 0 errors.
+  - All 238 unit and database tests passed. AI setup check passed.
+

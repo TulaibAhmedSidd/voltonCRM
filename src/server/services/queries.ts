@@ -2,7 +2,7 @@ import 'server-only'
 import { Types } from 'mongoose'
 import type { Department, KpiKey, LeadStatus, Role, Stage } from '@/domain/constants'
 import type { AttemptView, FollowUpView, KpiItem, LeadDetail, LeadSummary, MessageView, TeamMemberView } from '@/domain/view-models'
-import { pktDateKey } from '@/lib/dates-pkt'
+import { pktDateKey, pktParts } from '@/lib/dates-pkt'
 import { formatPkrCompact } from '@/lib/money'
 import { connectDb } from '@/server/db/connection'
 import { Activity, Attendance, Contact, ContactAttempt, Department as DepartmentModel, FollowUp, Lead, Message, Notification, Team, User, Visit } from '@/server/db/models'
@@ -72,10 +72,44 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
 
 export const LEAD_VIEWS = ['all', 'new', 'unassigned', 'mine', 'followups', 'interested', 'lost', 'unreachable'] as const
 export type LeadView = (typeof LEAD_VIEWS)[number]
+
+export const DATE_FILTERS = ['all', 'today', 'yesterday', 'week', 'month'] as const
+export type DateFilter = (typeof DATE_FILTERS)[number]
+
 export const PAGE_SIZE = 25
+
+export function dateFilterRange(dateFilter: DateFilter | undefined): { $gte?: Date; $lte?: Date } | null {
+  if (!dateFilter || dateFilter === 'all') return null
+  const now = new Date()
+  const p = pktParts(now)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const todayStart = new Date(`${p.year}-${pad(p.month)}-${pad(p.day)}T00:00:00+05:00`)
+  const todayEnd = new Date(`${p.year}-${pad(p.month)}-${pad(p.day)}T23:59:59.999+05:00`)
+
+  if (dateFilter === 'today') {
+    return { $gte: todayStart, $lte: todayEnd }
+  }
+  if (dateFilter === 'yesterday') {
+    const yesterdayDate = new Date(todayStart.getTime() - 86_400_000)
+    const yP = pktParts(yesterdayDate)
+    const yStart = new Date(`${yP.year}-${pad(yP.month)}-${pad(yP.day)}T00:00:00+05:00`)
+    const yEnd = new Date(`${yP.year}-${pad(yP.month)}-${pad(yP.day)}T23:59:59.999+05:00`)
+    return { $gte: yStart, $lte: yEnd }
+  }
+  if (dateFilter === 'week') {
+    const weekStart = new Date(todayStart.getTime() - 6 * 86_400_000)
+    return { $gte: weekStart, $lte: todayEnd }
+  }
+  if (dateFilter === 'month') {
+    const monthStart = new Date(`${p.year}-${pad(p.month)}-01T00:00:00+05:00`)
+    return { $gte: monthStart, $lte: todayEnd }
+  }
+  return null
+}
 
 export interface LeadListParams {
   view?: LeadView
+  date?: DateFilter
   q?: string
   department?: Department
   stage?: Stage
@@ -85,7 +119,7 @@ export interface LeadListParams {
   dir?: 'asc' | 'desc'
 }
 
-export async function listLeads(user: SessionUser, params: LeadListParams): Promise<{ rows: LeadSummary[]; total: number; counts: Record<LeadView, number> }> {
+export async function listLeads(user: SessionUser, params: LeadListParams): Promise<{ rows: LeadSummary[]; total: number; counts: Record<LeadView, number>; dateCounts: Record<DateFilter, number> }> {
   await connectDb()
   const scope = leadScope(user)
   const views: Record<LeadView, Record<string, unknown>> = {
@@ -105,6 +139,10 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
     const dept = await DepartmentModel.findOne({ code: params.department }).lean()
     if (dept && isAdminRole(user.role)) extra.departmentId = dept._id
   }
+  const dateRange = dateFilterRange(params.date)
+  if (dateRange) {
+    extra.receivedAt = dateRange
+  }
   if (params.q?.trim()) {
     const q = params.q.trim()
     const digits = q.replace(/\D/g, '')
@@ -119,13 +157,23 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
   const filter: Record<string, unknown> = { $and: [scope, extra] }
   const sortField = params.sort === 'followup' ? 'nextFollowUpAt' : params.sort === 'attempts' ? 'attemptCount' : 'receivedAt'
   const page = Math.max(1, params.page ?? 1)
-  const [docs, total, countEntries] = await Promise.all([
+  const [docs, total, countEntries, dateCountEntries] = await Promise.all([
     Lead.find(filter).sort({ [sortField]: params.dir === 'asc' ? 1 : -1 }).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).lean(),
     Lead.countDocuments(filter),
     Promise.all(LEAD_VIEWS.map(async (v) => [v, await Lead.countDocuments({ $and: [scope, views[v]] })] as const)),
+    Promise.all(DATE_FILTERS.map(async (df) => {
+      const range = dateFilterRange(df)
+      const q: Record<string, unknown> = range ? { receivedAt: range } : {}
+      return [df, await Lead.countDocuments({ $and: [scope, views[params.view ?? 'all'], q] })] as const
+    })),
   ])
   const maps = await lookups(docs)
-  return { rows: docs.map((d) => toSummary(d, maps, user)), total, counts: Object.fromEntries(countEntries) as Record<LeadView, number> }
+  return {
+    rows: docs.map((d) => toSummary(d, maps, user)),
+    total,
+    counts: Object.fromEntries(countEntries) as Record<LeadView, number>,
+    dateCounts: Object.fromEntries(dateCountEntries) as Record<DateFilter, number>,
+  }
 }
 
 export async function getLeadDetail(id: string, user: SessionUser) {

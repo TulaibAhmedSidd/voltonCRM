@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
+import { Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/common/page-header'
 import { FilterBar, FilterChip } from '@/components/common/filter-bar'
@@ -9,11 +10,12 @@ import { EmptyState } from '@/components/common/states'
 import { LeadCard } from '@/components/crm/lead-card'
 import { AssignmentBadge, DepartmentBadge, SourceBadge, StageBadge } from '@/components/crm/badges'
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
+import { SyncSheetButton } from '@/components/crm/sync-sheet-button'
 import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
-import { LEAD_VIEWS, PAGE_SIZE, listLeads, type LeadView } from '@/server/services/queries'
+import { DATE_FILTERS, LEAD_VIEWS, PAGE_SIZE, listLeads, type DateFilter, type LeadView } from '@/server/services/queries'
 
 export const metadata = { title: 'Leads' }
 
@@ -28,17 +30,26 @@ const VIEW_LABEL: Record<LeadView, string> = {
   unreachable: 'Dead / junk',
 }
 
+const DATE_LABEL: Record<DateFilter, string> = {
+  all: 'All dates',
+  today: 'Today',
+  yesterday: 'Yesterday',
+  week: 'This week',
+  month: 'This month',
+}
+
 export default async function LeadsPage(props: PageProps<'/leads'>) {
   const user = await requireUser()
   const sp = await props.searchParams
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined)
   const view = (LEAD_VIEWS as readonly string[]).includes(one('view') ?? '') ? (one('view') as LeadView) : user.role === 'agent' ? 'mine' : 'all'
+  const date = (DATE_FILTERS as readonly string[]).includes(one('date') ?? '') ? (one('date') as DateFilter) : 'all'
   const page = Number(one('page') ?? 1)
-  const { rows, total, counts } = await listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc' })
+  const { rows, total, counts, dateCounts } = await listLeads(user, { view, date, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc' })
   const views = LEAD_VIEWS.filter((v) => !(v === 'mine' && user.role !== 'agent') && !(v === 'unassigned' && user.role === 'agent'))
   const href = (params: Record<string, string | number | undefined>) => {
     const q = new URLSearchParams()
-    for (const [k, v] of Object.entries({ view, q: one('q'), sort: one('sort'), dir: one('dir'), ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
+    for (const [k, v] of Object.entries({ view, date: date === 'all' ? undefined : date, q: one('q'), sort: one('sort'), dir: one('dir'), ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
     return `/leads?${q}`
   }
   const columns: Column<LeadSummary>[] = [
@@ -65,13 +76,37 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   return (
     <>
-      <PageHeader title="Leads" description={`${total} in this view`} actions={<QuickAddLead defaultDepartment={user.departmentCode} />} />
+      <PageHeader
+        title="Leads"
+        description={`${total} in this view`}
+        actions={
+          <div className="flex items-center gap-2">
+            {user.role !== 'agent' ? <SyncSheetButton /> : null}
+            <QuickAddLead defaultDepartment={user.departmentCode} />
+          </div>
+        }
+      />
       <Suspense>
         <SearchBox />
       </Suspense>
       <FilterBar>
         {views.map((v) => (
           <FilterChip key={v} label={VIEW_LABEL[v]} href={href({ view: v, page: undefined })} active={v === view} count={counts[v]} />
+        ))}
+      </FilterBar>
+      <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+        <Calendar className="size-3.5 shrink-0" />
+        <span className="font-medium">Date received:</span>
+      </div>
+      <FilterBar className="pt-0">
+        {DATE_FILTERS.map((df) => (
+          <FilterChip
+            key={df}
+            label={DATE_LABEL[df]}
+            href={href({ date: df === 'all' ? undefined : df, page: undefined })}
+            active={df === date}
+            count={dateCounts[df]}
+          />
         ))}
       </FilterBar>
       {rows.length === 0 ? (

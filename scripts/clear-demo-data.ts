@@ -6,7 +6,7 @@
 import mongoose from 'mongoose'
 import { requireMongoUri } from '@/lib/env'
 import { connectDb } from '@/server/db/connection'
-import { ALL_MODELS, AuditLog, Department, Setting, User } from '@/server/db/models'
+import { ALL_MODELS, Department, Setting, User } from '@/server/db/models'
 
 const KEEP = new Set([Department.modelName, Setting.modelName, User.modelName])
 

@@ -18,3 +18,12 @@
 1. Push git commits so Vercel builds the new features (Auto-assign toggle, Pipeline drag scroll, progress bar, performance speedup, and in-app guide).
 2. Test dashboard toggle on Vercel (`volton-crm.vercel.app/dashboard`).
 3. Have staff review `/guide` on their mobile phones in English or Urdu.
+
+## 22:25 PKT Update
+1. Push walkthrough videos, screenshots, and updated guide to GitHub / Vercel.
+2. Review the Urdu MP4 videos with the team:
+   - Manager Guide: `public/guide/volton-crm-manager-guide-urdu.mp4`
+   - Employee Guide: `public/guide/volton-crm-employee-guide-urdu.mp4`
+   - Master Guide: `public/guide/volton-crm-complete-guide-urdu.mp4`
+3. Connect Meta WhatsApp Cloud API credentials in Vercel to unlock automatic CTWA lead ingestion and live in-CRM two-way customer chat.
+

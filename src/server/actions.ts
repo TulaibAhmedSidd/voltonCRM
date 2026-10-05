@@ -10,7 +10,7 @@ import { spreadsheetIdFrom } from '@/server/services/sheet'
 import { getServerEnv } from '@/lib/env'
 import { normalizePhone } from '@/lib/phone'
 import { connectDb } from '@/server/db/connection'
-import { AuditLog, Lead, Notification, Team, User, Visit } from '@/server/db/models'
+import { AuditLog, ContactAttempt, DocumentFile, Lead, Notification, SheetRow, Team, User, Visit } from '@/server/db/models'
 import { hashPassword, passwordProblem, safeEqual, verifyPassword, verifyPasswordOrDummy } from '@/server/auth/password'
 import { endSession, requireRole, requireUser, revokeSessions, startSession, type SessionUser } from '@/server/auth/session'
 import { isObjectId, loadLeadFor, loadManagedUser, safeNext } from '@/server/auth/guards'
@@ -725,4 +725,94 @@ export async function markNotificationsReadAction(): Promise<void> {
 export async function guardManager() {
   const user = await requireUser()
   return isManagerOrAdmin(user)
+}
+
+// ── Data Maintenance & Purge (Manager / Admin) ──
+
+export async function purgeDataAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    await connectDb()
+    const target = str(fd, 'target')
+    if (!target || !['screenshots', 'junk_leads', 'sheet_errors'].includes(target)) {
+      return { ok: false, message: 'Invalid purge target option' }
+    }
+
+    if (target === 'screenshots') {
+      const leadFilter: Record<string, unknown> = { deletedAt: null }
+      if (actor.role === 'manager' && actor.departmentId) {
+        leadFilter.departmentId = oid(actor.departmentId)
+      }
+      const leads = await Lead.find(leadFilter).select('_id').lean()
+      const leadIds = leads.map((l) => l._id)
+      const attempts = await ContactAttempt.find({ leadId: { $in: leadIds } }).select('_id proof.docIds').lean()
+      const attemptIds = attempts.map((a) => a._id)
+      const docIds = attempts.flatMap((a) => a.proof?.docIds ?? []).filter(Boolean)
+
+      let purgedDocs = 0
+      if (docIds.length > 0) {
+        const docRes = await DocumentFile.updateMany(
+          { _id: { $in: docIds }, deletedAt: null },
+          { $set: { deletedAt: new Date() } }
+        )
+        purgedDocs = docRes.modifiedCount
+      }
+      const attemptRes = await ContactAttempt.updateMany(
+        { _id: { $in: attemptIds } },
+        { $set: { 'proof.docIds': [] } }
+      )
+
+      await AuditLog.create({
+        entity: 'document',
+        entityId: null,
+        action: 'soft_delete',
+        before: { docCount: docIds.length },
+        after: { purgedDocs, clearedAttempts: attemptRes.modifiedCount },
+        actorId: oid(actor.id),
+      })
+      refresh()
+      return { ok: true, message: `Purged ${purgedDocs} screenshot attachment(s). Storage cleared.` }
+    }
+
+    if (target === 'junk_leads') {
+      const filter: Record<string, unknown> = {
+        status: { $in: ['unreachable', 'junk'] },
+        deletedAt: null,
+      }
+      if (actor.role === 'manager' && actor.departmentId) {
+        filter.departmentId = oid(actor.departmentId)
+      }
+      const count = await Lead.countDocuments(filter)
+      if (count === 0) {
+        return { ok: true, message: 'No junk or dead leads found to purge.' }
+      }
+      const res = await Lead.updateMany(filter, { $set: { deletedAt: new Date() } })
+      await AuditLog.create({
+        entity: 'lead',
+        entityId: null,
+        action: 'soft_delete',
+        before: { target: 'junk_leads', count },
+        after: { purgedCount: res.modifiedCount },
+        actorId: oid(actor.id),
+      })
+      refresh()
+      return { ok: true, message: `Archived ${res.modifiedCount} dead/junk lead(s) successfully.` }
+    }
+
+    if (target === 'sheet_errors') {
+      const res = await SheetRow.deleteMany({ status: 'failed' })
+      await AuditLog.create({
+        entity: 'sheet_row',
+        entityId: null,
+        action: 'soft_delete',
+        before: { target: 'failed_rows' },
+        after: { deletedCount: res.deletedCount },
+        actorId: oid(actor.id),
+      })
+      refresh()
+      return { ok: true, message: `Cleared ${res.deletedCount} failed sheet row error(s). Ready for retry.` }
+    }
+
+    return { ok: false, message: 'Unknown purge target' }
+  })
 }
