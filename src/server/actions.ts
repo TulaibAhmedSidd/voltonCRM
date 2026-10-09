@@ -29,10 +29,13 @@ import { changeStage, deleteLeads, reopenLead, transferLead } from '@/server/ser
 import { clear, hit, isBlocked } from '@/server/services/rate-limit'
 import { setSetting } from '@/server/services/settings'
 import { assignVisit, createVisit, updateVisit } from '@/server/services/visits'
-import { sendWhatsAppText } from '@/server/services/whatsapp'
+import { sendWhatsAppDocument, sendWhatsAppText } from '@/server/services/whatsapp'
 import { saveMetaFormDepartments, subscribeMetaPage, syncMetaLeads } from '@/server/services/meta-leads'
 import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
-import { createQuotation } from '@/server/services/quotations'
+import { createQuotation, getQuotationFor } from '@/server/services/quotations'
+import { buildQuotationPdf } from '@/server/services/quotation-pdf'
+import { quotationInput, formatRs } from '@/domain/quotation'
+import { removePushSubscription, savePushSubscription, sendPush } from '@/server/services/push'
 import { isHexColor, THEME_PRESETS } from '@/styles/runtime-theme'
 
 const str = (fd: FormData, key: string) => {
@@ -759,6 +762,37 @@ export async function syncMetaLeadsAction(_prev: ActionState, fd: FormData): Pro
   })
 }
 
+// ── Phone / PC notifications ──
+
+const pushSubscriptionInput = z.object({
+  endpoint: z.string().url().startsWith('https://').max(1000),
+  keys: z.object({ p256dh: z.string().min(10).max(200), auth: z.string().min(8).max(100) }),
+})
+
+/** This device wants notifications for the signed-in user. Sends a test notification straight away. */
+export async function savePushSubscriptionAction(input: unknown): Promise<ActionState> {
+  const user = await requireUser()
+  try {
+    const parsed = pushSubscriptionInput.safeParse(input)
+    if (!parsed.success) return { ok: false, message: 'This browser sent an invalid subscription. Try again.' }
+    await savePushSubscription(user.id, parsed.data, (await headers()).get('user-agent'))
+    await sendPush([user.id], { title: 'Notifications are on ✓', body: 'You will get new leads, pings and reminders here.', link: '/dashboard' })
+    return { ok: true, message: 'Notifications are on for this device.' }
+  } catch (error) {
+    return errorState(error)
+  }
+}
+
+export async function removePushSubscriptionAction(endpoint: string): Promise<ActionState> {
+  const user = await requireUser()
+  try {
+    if (typeof endpoint === 'string' && endpoint.length < 1000) await removePushSubscription(user.id, endpoint)
+    return { ok: true, message: 'Notifications are off for this device.' }
+  } catch (error) {
+    return errorState(error)
+  }
+}
+
 // ── Quotations ──
 
 export type QuotationState = (ActionState & { quotationId?: string; quotationNo?: string }) | null
@@ -774,6 +808,24 @@ export async function createQuotationAction(input: { leadId: string; quotation: 
     return { ok: true, message: `Quotation ${r.quotationNo} is ready (Rs ${r.total.toLocaleString('en-US')}).`, quotationId: r.id, quotationNo: r.quotationNo }
   } catch (error) {
     if (isRedirect(error)) throw error
+    return errorState(error)
+  }
+}
+
+/** Send a saved quotation PDF to the customer on WhatsApp (from the CRM, within Meta's 24-hour window). */
+export async function sendQuotationWhatsAppAction(quotationId: string): Promise<ActionState> {
+  const user = await requireUser()
+  try {
+    const q = typeof quotationId === 'string' ? await getQuotationFor(user, quotationId) : null
+    if (!q) return { ok: false, message: 'Quotation not found' }
+    const input = quotationInput.parse(q.input)
+    const data = buildQuotationPdf({ quotationNo: q.quotationNo, leadNo: q.leadNo, issuedAt: q.issuedAt, validUntil: q.validUntil, customer: q.customer, preparedBy: q.preparedBy, input })
+    const filename = `Volton-Quotation-${q.quotationNo}.pdf`
+    const caption = `Assalam o Alaikum ${q.customer.name}, here is your Volton Solar quotation ${q.quotationNo} (Rs ${formatRs(q.total)}). — ${q.preparedBy.name}`
+    await sendWhatsAppDocument(String(q.leadId), { data, filename, caption }, user)
+    refresh()
+    return { ok: true, message: `Sent ${q.quotationNo} to ${q.customer.name} on WhatsApp.` }
+  } catch (error) {
     return errorState(error)
   }
 }

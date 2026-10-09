@@ -12,9 +12,12 @@ vi.mock('next/headers', () => ({
   }),
   headers: async () => new Headers({ 'x-forwarded-for': '10.9.9.7' }),
 }))
+process.env.WHATSAPP_TOKEN = 'wa-test-token'
+process.env.WHATSAPP_PHONE_NUMBER_ID = '700100200'
 vi.mock('react', async (importOriginal) => ({ ...(await importOriginal<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
 
-const { ALL_MODELS, Activity, Department, Lead, Quotation, User } = await import('@/server/db/models')
+const { ALL_MODELS, Activity, Department, Lead, Message, Quotation, User, WhatsAppNumber } = await import('@/server/db/models')
+const { sendWhatsAppDocument } = await import('@/server/services/whatsapp')
 const { ingestLead } = await import('@/server/services/ingest')
 const { createQuotation, listQuotations, getQuotationFor } = await import('@/server/services/quotations')
 const { defaultQuotation } = await import('@/domain/quotation')
@@ -95,5 +98,31 @@ describe('quotations', () => {
     expect(res.headers.get('content-type')).toBe('application/pdf')
     expect(res.headers.get('content-disposition')).toMatch(/^attachment; filename="Volton-Quotation-VO-100\d-Quote-Customer\.pdf"$/)
     expect(Buffer.from(await res.arrayBuffer()).subarray(0, 8).toString()).toBe('%PDF-1.4')
+  })
+})
+
+describe('send the quotation PDF on WhatsApp', () => {
+  it('outside the 24-hour window it explains what to do; inside it uploads the PDF and sends it as a document', async () => {
+    const lead = await Lead.findById(leadId).lean()
+    const file = { data: Buffer.from('%PDF-1.4 test'), filename: 'Volton-Quotation-VO-1001.pdf', caption: 'Your quotation' }
+    await expect(sendWhatsAppDocument(leadId, file, agent)).rejects.toThrow(/24 hours/)
+
+    const number = await WhatsAppNumber.create({ phoneNumberId: '700100200', number: '+923000000099', ownerType: 'department', status: 'connected' })
+    await Message.create({ waMessageId: 'wamid.q-in', contactId: lead!.contactId, leadId, numberId: number._id, direction: 'in', type: 'text', text: 'Please send the quote', sentFrom: 'customer', status: 'received', at: new Date() })
+    const calls: { url: string; body: unknown }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url: String(url), body: init.body })
+        if (String(url).endsWith('/media')) return Response.json({ id: 'MEDIA-1' })
+        return Response.json({ messages: [{ id: 'wamid.q-doc' }] })
+      }),
+    )
+    await sendWhatsAppDocument(leadId, file, agent)
+    vi.unstubAllGlobals()
+    expect(calls[0].url).toBe('https://graph.facebook.com/v23.0/700100200/media')
+    expect(calls[0].body).toBeInstanceOf(FormData)
+    expect(JSON.parse(String(calls[1].body))).toMatchObject({ to: '923007700001', type: 'document', document: { id: 'MEDIA-1', filename: 'Volton-Quotation-VO-1001.pdf', caption: 'Your quotation' } })
+    expect(await Message.findOne({ waMessageId: 'wamid.q-doc' }).lean()).toMatchObject({ direction: 'out', type: 'document', sentFrom: 'api' })
   })
 })

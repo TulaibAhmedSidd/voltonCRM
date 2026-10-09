@@ -25,11 +25,12 @@ import { en } from '@/i18n/en'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { isManagerOrAdmin } from '@/server/auth/scope'
-import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, pingAgentAction, changeStageAction, createVisitAction, reopenLeadAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
+import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, changeStageAction, createVisitAction, reopenLeadAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
 import { getLeadDetail, getTeamBoard } from '@/server/services/queries'
 import { AGENT_STAGES } from '@/server/services/leads'
 import { formatPkrCompact } from '@/lib/money'
 import { QuotationBuilder } from '@/components/crm/quotation-builder'
+import { PingAgent } from '@/components/crm/ping-agent'
 import { defaultQuotation } from '@/domain/quotation'
 import { lastQuotationInput, listQuotations } from '@/server/services/quotations'
 
@@ -48,6 +49,9 @@ function describe(type: string, d: Record<string, unknown>): string {
 export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const user = await requireUser()
   const { id } = await props.params
+  const sp = await props.searchParams
+  const TABS = ['timeline', 'quotation', 'proof', 'whatsapp', 'followups', 'site'] as const
+  const tab = TABS.find((t) => t === sp.tab) ?? 'timeline'
   const data = await getLeadDetail(id, user)
   if (!data) notFound()
   const { lead, raw, attempts, followUps, activities, messages, visits } = data
@@ -106,6 +110,20 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
       ) : null}
 
       {user.role !== 'field_agent' ? (
+        <SectionCard
+          title="Quotation"
+          description={quotations.length ? `Latest: ${quotations[0].quotationNo} · Rs ${quotations[0].total.toLocaleString('en-US')} · by ${quotations[0].preparedBy}` : 'Make a priced quotation PDF with the Volton logo, signed with your name, and send it to the customer.'}
+          actions={
+            <Button asChild size="touch">
+              <Link href={`/leads/${lead.id}?tab=quotation#lead-tabs`}>{quotations.length ? 'Quotations / new' : 'Make quotation'}</Link>
+            </Button>
+          }
+        >
+          {!canQuote ? <p className="text-sm text-muted-foreground">{lead.status !== 'open' ? 'This lead is closed — earlier quotations can still be opened.' : 'Accept the lead first, then you can make a quotation.'}</p> : null}
+        </SectionCard>
+      ) : null}
+
+      {user.role !== 'field_agent' ? (
         <section aria-label="Lead progress" className="space-y-3">
           <LeadJourney steps={journey.steps} />
           <details className="rounded-xl px-4 ring-1 ring-foreground/10">
@@ -147,14 +165,10 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               </Button>
             </ActionForm>
             {lead.agent && lead.status === 'open' ? (
-              <ActionForm action={pingAgentAction} className="space-y-2">
-                <input type="hidden" name="leadId" value={lead.id} />
-                <input type="hidden" name="agentId" value={lead.agent.id} />
-                <TextField label={`Ping ${lead.agent.name}`} name="message" maxLength={200} placeholder="e.g. Please call this customer now" />
-                <Button type="submit" variant="outline" size="touch" className="w-full">
-                  Send ping
-                </Button>
-              </ActionForm>
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Ping {lead.agent.name}</p>
+                <PingAgent agentId={lead.agent.id} agentName={lead.agent.name} leadId={lead.id} label={`Ping ${lead.agent.name.split(' ')[0]}`} placeholder="e.g. Please call this customer now" />
+              </div>
             ) : null}
             <details className="md:col-span-3">
               <summary className="flex min-h-11 cursor-pointer items-center text-sm text-muted-foreground">Delete this lead…</summary>
@@ -208,14 +222,14 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
         </SectionCard>
       ) : null}
 
-      <Tabs defaultValue="timeline">
+      <Tabs key={tab} defaultValue={tab} id="lead-tabs" className="scroll-mt-20">
         <TabsList className="w-full overflow-x-auto">
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="quotation">Quotation{quotations.length ? ` (${quotations.length})` : ''}</TabsTrigger>
           <TabsTrigger value="proof">Proof ({attempts.length})</TabsTrigger>
           <TabsTrigger value="whatsapp">WhatsApp ({messages.length})</TabsTrigger>
           <TabsTrigger value="followups">Follow-ups</TabsTrigger>
           <TabsTrigger value="site">Site & visit</TabsTrigger>
-          <TabsTrigger value="quotation">Quotation{quotations.length ? ` (${quotations.length})` : ''}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="timeline" className="space-y-4 pt-4">

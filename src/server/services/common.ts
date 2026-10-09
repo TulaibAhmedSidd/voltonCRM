@@ -2,6 +2,7 @@ import 'server-only'
 import { Types, type ClientSession } from 'mongoose'
 import type { ActivityType, JobKind, NotificationType } from '@/domain/constants'
 import { Activity, Job, Notification } from '@/server/db/models'
+import { sendPush } from '@/server/services/push'
 
 export const oid = (id: string | Types.ObjectId) => (typeof id === 'string' ? new Types.ObjectId(id) : id)
 
@@ -39,11 +40,15 @@ export async function notify({ userIds, type, title, body = '', link, dedupeKey 
   const unique = [...new Set(userIds.map(String))]
   if (unique.length === 0) return
   const docs = unique.map((userId) => ({ userId: oid(userId), type, title, body, link: link ?? null, dedupeKey: `${dedupeKey}:${userId}` }))
+  let inserted: string[] = []
   try {
-    await Notification.insertMany(docs, { ordered: false })
+    inserted = (await Notification.insertMany(docs, { ordered: false })).map((d) => String(d.userId))
   } catch (error) {
     if (!isDuplicateKey(error) && !(error as { writeErrors?: unknown[] }).writeErrors) throw error
+    inserted = ((error as { insertedDocs?: { userId: unknown }[] }).insertedDocs ?? []).map((d) => String(d.userId))
   }
+  // Phone / PC notification for every NEW alert (a repeated dedupeKey is not pushed twice).
+  if (inserted.length) await sendPush(inserted, { title, body, link, tag: type })
 }
 
 /** Schedule a timer for the cron tick. Same dedupeKey twice = no-op. */

@@ -15,6 +15,8 @@ import { TeamMemberRow } from '@/components/crm/team-member-row'
 import { VISIT_STATUS_META } from '@/domain/ui-maps'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
+import { WhatsAppNumber } from '@/server/db/models'
+import { oid } from '@/server/services/common'
 import { acceptLeadAction, checkInAction, checkOutAction, toggleBreakAction } from '@/server/actions'
 import { getAttendance } from '@/server/services/assignment'
 import { getKpis, getQueuePanels, getTeamBoard, listFollowUps, listLeads, listVisits } from '@/server/services/queries'
@@ -70,7 +72,7 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
       )
     }
 
-    const [mine, followUps, kpis] = await Promise.all([listLeads(user, { view: 'mine' }), listFollowUps(user), getKpis(user)])
+    const [mine, followUps, kpis, myNumber] = await Promise.all([listLeads(user, { view: 'mine' }), listFollowUps(user), getKpis(user), WhatsAppNumber.findOne({ agentId: oid(user.id), status: 'connected' }).select('number displayName coexistence lastEchoAt').lean()])
     const toAccept = mine.rows.filter((l) => l.assignmentState === 'assigned')
     const dueToday = followUps.filter((f) => new Date(f.dueAt).getTime() < now.getTime() + 12 * 3_600_000)
     return (
@@ -101,6 +103,19 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
           {dueToday.length === 0 ? <EmptyState title="Nothing due" /> : dueToday.slice(0, 10).map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}`} />)}
         </SectionCard>
         <KpiGrid items={kpis.slice(0, 8)} />
+        <SectionCard title="My WhatsApp" description={myNumber ? undefined : 'Connect the WhatsApp Business number on your phone so your chats are saved as proof automatically.'}>
+          {myNumber ? (
+            <p className="text-sm">
+              <span className="font-medium">{myNumber.displayName ?? 'Your number'} · {myNumber.number}</span> is connected. Customer messages and the replies you type in the WhatsApp Business app are saved on the lead automatically{myNumber.lastEchoAt ? ` (last reply from your phone ${formatPktDateTime(myNumber.lastEchoAt)})` : ''}.
+            </p>
+          ) : (
+            <ol className="list-decimal space-y-1 ps-5 text-sm text-muted-foreground">
+              <li>Tell your manager or admin you want your WhatsApp connected — only an <b>admin</b> can do it (Settings → WhatsApp numbers → Connect, choosing your name).</li>
+              <li>Keep your phone with you: the WhatsApp <b>Business</b> app on it must be updated, and you confirm the connection on the phone.</li>
+              <li>Until then, keep using the WhatsApp button on each lead and add a screenshot as proof.</li>
+            </ol>
+          )}
+        </SectionCard>
       </>
     )
   }

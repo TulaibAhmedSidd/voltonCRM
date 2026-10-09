@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Download, FileText, Plus, Share2, Trash2 } from 'lucide-react'
+import { Download, FileText, MessageCircle, Plus, Send, Share2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   BATTERY_SUGGESTIONS,
@@ -16,7 +16,7 @@ import {
   rupeesInWords,
   type QuotationInput,
 } from '@/domain/quotation'
-import { createQuotationAction } from '@/server/actions'
+import { createQuotationAction, sendQuotationWhatsAppAction } from '@/server/actions'
 import { cn } from '@/lib/utils'
 
 export interface QuotationRow {
@@ -53,25 +53,54 @@ function Section({ n, title, children }: { n: number; title: string; children: R
   )
 }
 
-function PdfButtons({ id, no, onShare }: { id: string; no: string; onShare: (id: string, no: string) => void }) {
+/** Open / download a quotation and get it to the customer: from the CRM on WhatsApp, the customer's WhatsApp chat, or the phone's share menu. */
+function PdfButtons({ id, no, total, customer, onShare }: { id: string; no: string; total: number; customer: { name: string; phone: string }; onShare: (id: string, no: string) => void }) {
+  const [sending, startSend] = useTransition()
+  const [sent, setSent] = useState<{ ok: boolean; message?: string } | null>(null)
+  const digits = customer.phone.replace(/\D/g, '')
+  const text = encodeURIComponent(`Assalam o Alaikum ${customer.name}, here is your Volton Solar quotation ${no} (Rs ${formatRs(total)}). The PDF is attached.`)
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button asChild variant="outline" size="touch">
-        <a href={`/api/quotations/${id}/pdf`} target="_blank" rel="noreferrer">
-          <FileText aria-hidden />
-          Open PDF
-        </a>
-      </Button>
-      <Button asChild variant="outline" size="touch">
-        <a href={`/api/quotations/${id}/pdf?download=1`}>
-          <Download aria-hidden />
-          Download
-        </a>
-      </Button>
-      <Button type="button" variant="outline" size="touch" onClick={() => onShare(id, no)}>
-        <Share2 aria-hidden />
-        Share (WhatsApp…)
-      </Button>
+    <div className="w-full space-y-2 sm:w-auto">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="touch"
+          disabled={sending}
+          onClick={() =>
+            startSend(async () => {
+              setSent(await sendQuotationWhatsAppAction(id))
+            })
+          }
+        >
+          <Send aria-hidden />
+          {sending ? 'Sending…' : 'Send to customer on WhatsApp'}
+        </Button>
+        <Button asChild variant="outline" size="touch">
+          <a href={`/api/quotations/${id}/pdf`} target="_blank" rel="noreferrer">
+            <FileText aria-hidden />
+            Open PDF
+          </a>
+        </Button>
+        <Button asChild variant="outline" size="touch">
+          <a href={`/api/quotations/${id}/pdf?download=1`}>
+            <Download aria-hidden />
+            Download
+          </a>
+        </Button>
+        <Button type="button" variant="outline" size="touch" onClick={() => onShare(id, no)}>
+          <Share2 aria-hidden />
+          Share from phone
+        </Button>
+        {digits ? (
+          <Button asChild variant="outline" size="touch">
+            <a href={`https://wa.me/${digits}?text=${text}`} target="_blank" rel="noreferrer">
+              <MessageCircle aria-hidden />
+              Open customer&apos;s WhatsApp
+            </a>
+          </Button>
+        ) : null}
+      </div>
+      {sent?.message ? <p className={cn('rounded-lg px-3 py-2 text-xs', sent.ok ? 'bg-tone-success-soft text-tone-success-soft-foreground' : 'bg-tone-warning-soft text-tone-warning-soft-foreground')}>{sent.message}</p> : null}
     </div>
   )
 }
@@ -131,7 +160,7 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
                     {fmtDate(x.issuedAt)} by {x.preparedBy} · valid until {fmtDate(x.validUntil)}
                   </span>
                 </span>
-                <PdfButtons id={x.id} no={x.quotationNo} onShare={share} />
+                <PdfButtons id={x.id} no={x.quotationNo} total={x.total} customer={customer} onShare={share} />
               </li>
             ))}
           </ul>
@@ -351,7 +380,7 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
             {result ? (
               <div role="status" className={cn('space-y-2 rounded-lg px-3 py-2 text-sm', result.ok ? 'bg-tone-success-soft text-tone-success-soft-foreground' : 'bg-tone-danger-soft text-tone-danger-soft-foreground')}>
                 <p>{result.message}</p>
-                {result.ok && result.quotationId && result.quotationNo ? <PdfButtons id={result.quotationId} no={result.quotationNo} onShare={share} /> : null}
+                {result.ok && result.quotationId && result.quotationNo ? <PdfButtons id={result.quotationId} no={result.quotationNo} total={totals.total} customer={customer} onShare={share} /> : null}
               </div>
             ) : null}
           </div>

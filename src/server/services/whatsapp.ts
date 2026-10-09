@@ -225,6 +225,43 @@ export async function sendWhatsAppText(leadId: string, text: string, user: Sessi
   await verifyRecentAttempt(leadId, user.id)
 }
 
+/**
+ * Send a file (e.g. the quotation PDF) to the lead's customer on WhatsApp from the company number they wrote to.
+ * Meta allows this only within 24 h of the customer's last message — otherwise the agent sends it from the phone.
+ */
+export async function sendWhatsAppDocument(leadId: string, file: { data: Buffer; filename: string; caption: string }, user: SessionUser): Promise<void> {
+  await connectDb()
+  const lead = await loadLeadFor(user, leadId, 'work')
+  if ((await hit(`wa_doc:${user.id}`, 20, 60 * 60_000)).blocked) throw new UserError('Too many files sent — wait a little')
+  const lastIn = await Message.findOne({ contactId: lead.contactId, direction: 'in' }).sort({ at: -1 }).select('at numberId').lean()
+  if (!lastIn || Date.now() - lastIn.at.getTime() > 24 * 3_600_000) {
+    throw new UserError("WhatsApp only lets the CRM send a file within 24 hours of the customer's last message. Use “Open customer's WhatsApp” and attach the downloaded PDF from your phone.")
+  }
+  const sender = await senderFor(lastIn.numberId)
+  if (!sender) throw new UserError('WhatsApp is not connected yet.')
+  const contact = await Contact.findById(lead.contactId).lean()
+  const to = (contact?.whatsappE164 ?? contact?.phones[0] ?? '').replace(/^\+/, '')
+
+  const form = new FormData()
+  form.append('messaging_product', 'whatsapp')
+  form.append('type', 'application/pdf')
+  form.append('file', new Blob([new Uint8Array(file.data)], { type: 'application/pdf' }), file.filename)
+  const up = await fetch(`${GRAPH}/${sender.phoneNumberId}/media`, { method: 'POST', headers: { Authorization: `Bearer ${sender.token}` }, body: form })
+  const media = (await up.json().catch(() => ({}))) as { id?: string; error?: { message: string } }
+  if (!up.ok || !media.id) throw new UserError(`WhatsApp did not accept the file: ${media.error?.message ?? up.status}`)
+
+  const res = await fetch(`${GRAPH}/${sender.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${sender.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'document', document: { id: media.id, filename: file.filename, caption: file.caption.slice(0, 1000) } }),
+  })
+  const body = (await res.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message: string } }
+  if (!res.ok || !body.messages?.[0]) throw new UserError(body.error?.message ?? 'WhatsApp send failed')
+  const number = await WhatsAppNumber.findOne({ phoneNumberId: sender.phoneNumberId }).select('_id').lean()
+  if (number) await Message.create({ waMessageId: body.messages[0].id, contactId: lead.contactId, leadId: lead._id, numberId: number._id, direction: 'out', type: 'document', text: `📄 ${file.filename} — ${file.caption}`.slice(0, 1000), sentFrom: 'api', sentByUserId: oid(user.id), status: 'sent', at: new Date() })
+  await logActivity(lead._id, 'message_out', user.id, { text: `Sent ${file.filename} on WhatsApp`, via: 'crm' })
+}
+
 /** Process one stored webhook event and record the result (processWebhook is idempotent, so retries are safe). */
 export async function processStoredEvent(key: string): Promise<void> {
   await connectDb()

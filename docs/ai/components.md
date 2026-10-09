@@ -66,6 +66,8 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | LeadSourcesPanel | lead-sources-panel.tsx | `sources` — Leads page (managers/admins): each lead source (Meta forms, WhatsApp, Google Sheet, staff) with auto-sync status, last activity, problems; includes AutoRefresh |
 | AutoRefresh | common/auto-refresh.tsx | `everyMs?, busySelector?` — client: router.refresh() every minute while visible (skips while typing / leads ticked) |
 | PasswordField / PasswordInput | common/password-field.tsx | like TextField; eye button to show / hide; `defaultVisible` for temporary passwords |
+| PingAgent | crm/ping-agent.tsx | `agentId, agentName, leadId?, label?, placeholder?` — client: popup to ping an agent; one open at a time, closes after sending ("Sent") |
+| PushPrompt | common/push-prompt.tsx | `pushKey` — banner on every page until this device has phone / PC notifications on (iPhone: Add to Home Screen first) |
 | QueuePanel | queue-panel.tsx | `teams` from `getQueuePanels()` — why leads wait + "Assign waiting leads now" |
 | AlertPrefsForm | alert-prefs-form.tsx | `prefs, employees` — Settings → My alerts |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |

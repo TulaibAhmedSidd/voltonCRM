@@ -9,7 +9,8 @@ import { StatusBadge } from '@/components/common/status-badge'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
 import { DEPARTMENT_META } from '@/domain/ui-maps'
 import { requireRole } from '@/server/auth/session'
-import { bulkReassignAction, moveTeamMemberAction, pingAgentAction, setTeamMemberAction, updateTeamSettingsAction } from '@/server/actions'
+import { bulkReassignAction, moveTeamMemberAction, setTeamMemberAction, updateTeamSettingsAction } from '@/server/actions'
+import { PingAgent } from '@/components/crm/ping-agent'
 import { getTeamBoard, getTeams } from '@/server/services/queries'
 
 export const metadata = { title: 'Team' }
@@ -102,16 +103,7 @@ export default async function TeamPage() {
               <div className="flex-1">
                 <TeamMemberRow member={m} now={now} />
               </div>
-              <details className="relative">
-                <summary className="flex min-h-11 cursor-pointer items-center rounded-lg px-3 text-sm font-medium ring-1 ring-foreground/10">Ping</summary>
-                <ActionForm action={pingAgentAction} className="absolute end-0 z-10 mt-2 w-72 rounded-xl bg-card p-3 shadow-lg ring-1 ring-foreground/10">
-                  <input type="hidden" name="agentId" value={m.id} />
-                  <TextField label={`Message to ${m.name}`} name="message" maxLength={200} placeholder="Please check your leads" />
-                  <Button type="submit" size="touch" className="w-full">
-                    Send ping
-                  </Button>
-                </ActionForm>
-              </details>
+              <PingAgent agentId={m.id} agentName={m.name} />
               {m.openLeads > 0 ? (
                 <form action={bulkReassignAction}>
                   <input type="hidden" name="fromAgentId" value={m.id} />

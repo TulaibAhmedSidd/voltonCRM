@@ -178,3 +178,19 @@
 - **Delete (bulk) moved under the table.** Tick leads in the list, then delete at the bottom.
 - **Every password box has an eye button** to show / hide: login, first setup, change password, and the temporary password when adding a user or resetting one (temporary passwords start visible).
 - Tests: tests/unit/password-refresh.test.tsx; lead sources test in tests/db/reports.test.ts. Checked in the browser on a local copy: eye toggles, panel shows, delete bar is under the table, and the list updated itself.
+
+## Later — ping popup, phone / PC notifications, quotation easier to find + send to customer
+- **Ping:** a proper popup (Team page and lead page). Only one is open at a time, and it closes by itself after sending (the button shows "Sent").
+- **Super admin** can now do manager actions on a lead, such as ping or delete (the "manage" check left super_admin out).
+- **Notifications:**
+  - **Pop-up toast** in the app for every new alert (bottom-right on PC, above the bottom menu on phones; drawn on `<body>`).
+  - **Phone / PC notifications** (Web Push, `web-push` package): every `notify()` also pushes to the person's devices, once per alert; dead devices are removed. If the CRM is open on screen, the service worker hands the alert to the page (toast) instead of a system notification.
+  - A banner on every page and a switch in the bell turn it on per device. iPhone: Add to Home Screen first.
+  - New env: `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY`, `WEB_PUSH_SUBJECT` (generated into .env.local; must be added in Vercel).
+- **Quotation:**
+  - "Quotation" card near the top of every lead, with a "Make quotation" button.
+  - The Quotation tab is now 2nd (it was last and off-screen on phones); `?tab=quotation` opens it.
+  - Per quotation: **Send to customer on WhatsApp** (the CRM uploads the PDF and sends it as a document from the company number the customer wrote to; Meta's 24-hour rule is explained when it applies), Open PDF, Download, Share from phone, and Open customer's WhatsApp (wa.me with a ready message).
+- **Agent dashboard → "My WhatsApp":** shows the connected number, or the steps (only an admin can connect it, with the agent's phone).
+- Checked on a local copy: Make quotation → tab opens → generate VO-1001 → send buttons → the 24-hour message; the pop-up toast appears bottom-right for a new alert.
+- Tests: tests/db/push.test.ts, tests/unit/ping-agent.test.tsx, WhatsApp document send in tests/db/quotations.test.ts.
