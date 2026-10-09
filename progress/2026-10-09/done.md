@@ -80,3 +80,8 @@
 - A public `/privacy` page, which Meta needs before the app can go Live.
 - New env vars: `META_PAGE_ID`, `META_PAGE_ACCESS_TOKEN`, plus `META_APP_SECRET` / `META_VERIFY_TOKEN`, which fall back to the WhatsApp values. Setup steps are in `docs/meta-leads-setup.md`.
 - Tests (api-routes.test.ts): verify token, signature, webhook → lead with form answers and department, Meta retry not doubled, catch-up sync skips existing customers, expired token message, page subscribe.
+
+## Later — moved to the new GitHub repo
+- The project now lives at https://github.com/TulaibAhmedSidd/voltonCRM (`origin`). The old repo (tulaibpsw/CRMvolt) is kept as remote `crmvolt-old` only for reference.
+- Both histories are joined (merge, no force push). The new repo's extra files (guide page, guide videos and screenshots, recording scripts, loading screen) are kept.
+- Removed `src/components/crm/auto-assign-toggle.tsx`: no page used it, and it called an action that no longer exists, so it broke the type check / build.
