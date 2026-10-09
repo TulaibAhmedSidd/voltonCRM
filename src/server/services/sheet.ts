@@ -318,6 +318,7 @@ async function ingestRow(mapped: Mapped, ctx: RowContext) {
       formName: mapped.fields.formName,
       sheetTab: ctx.tab,
       sheetRow: ctx.index + 2,
+      platform: /^(fb|facebook)$/i.test(mapped.fields.platform ?? '') ? 'facebook' : /^(ig|instagram)$/i.test(mapped.fields.platform ?? '') ? 'instagram' : undefined,
     },
     site,
     extra: { ...mapped.extra, ...unmatched, ...(mapped.fields.status ? { 'Lead Status (Sheet)': mapped.fields.status } : {}), ...(mapped.fields.agentName ? { 'Call Agent (Sheet)': mapped.fields.agentName } : {}) },

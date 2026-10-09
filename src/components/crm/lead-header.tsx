@@ -35,7 +35,7 @@ export function LeadHeader({ lead, actions }: { lead: LeadDetail; actions?: Reac
         <StageBadge stage={lead.stage} />
         <LeadStatusBadge status={lead.status} />
         <DepartmentBadge department={lead.department} />
-        <SourceBadge channel={lead.channel} detail={lead.sourceDetail} />
+        <SourceBadge channel={lead.channel} detail={lead.sourceDetail} platform={lead.platform} isAd={lead.isAd} />
       </div>
       <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         {facts

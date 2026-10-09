@@ -17,7 +17,9 @@ import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone, maskPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
-import { LEAD_VIEWS, PAGE_SIZE, getQueuePanels, listLeads, type LeadView } from '@/server/services/queries'
+import { LEAD_VIEWS, PAGE_SIZE, getQueuePanels, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
+import { activeFilterCount, parseLeadFilters } from '@/domain/lead-filters'
+import { LeadFilterPanel } from '@/components/crm/lead-filter-panel'
 import { QueuePanel } from '@/components/crm/queue-panel'
 
 export const metadata = { title: 'Leads' }
@@ -39,11 +41,15 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined)
   const view = (LEAD_VIEWS as readonly string[]).includes(one('view') ?? '') ? (one('view') as LeadView) : user.role === 'agent' ? 'mine' : 'all'
   const page = Number(one('page') ?? 1)
-  const { rows, total, counts } = await listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc' })
+  const filters = parseLeadFilters(one)
+  const [{ rows, total, counts }, filterOptions] = await Promise.all([
+    listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc', filters }),
+    leadFilterOptions(user),
+  ])
   const views = LEAD_VIEWS.filter((v) => !(v === 'mine' && user.role !== 'agent') && !(v === 'unassigned' && user.role === 'agent'))
   const href = (params: Record<string, string | number | undefined>) => {
     const q = new URLSearchParams()
-    for (const [k, v] of Object.entries({ view, q: one('q'), sort: one('sort'), dir: one('dir'), ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
+    for (const [k, v] of Object.entries({ view, q: one('q'), sort: one('sort'), dir: one('dir'), ...filters, ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
     return `/leads?${q}`
   }
   const canDelete = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin'
@@ -63,7 +69,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     },
     { key: 'stage', header: 'Stage', cell: (l) => <StageBadge stage={l.stage} size="sm" /> },
     { key: 'dept', header: 'Dept', cell: (l) => <DepartmentBadge department={l.department} size="sm" /> },
-    { key: 'source', header: 'Source', cell: (l) => <SourceBadge channel={l.channel} detail={l.sourceDetail} size="sm" /> },
+    { key: 'source', header: 'Source', cell: (l) => <SourceBadge channel={l.channel} detail={l.sourceDetail} platform={l.platform} isAd={l.isAd} size="sm" /> },
     { key: 'agent', header: 'Agent', cell: (l) => (l.agent ? l.agent.name : <AssignmentBadge state={l.assignmentState} size="sm" />) },
     { key: 'attempts', header: 'Attempts', sortable: true, align: 'end', cell: (l) => l.attemptCount },
     { key: 'followup', header: 'Next follow-up', sortable: true, cell: (l) => (l.nextFollowUpAt ? formatPktDateTime(new Date(l.nextFollowUpAt)) : '—') },
@@ -100,9 +106,22 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           <FilterChip key={v} label={VIEW_LABEL[v]} href={href({ view: v, page: undefined })} active={v === view} count={counts[v]} />
         ))}
       </FilterBar>
+      <LeadFilterPanel
+        filters={filters}
+        keep={{ view, q: one('q'), sort: one('sort'), dir: one('dir') }}
+        href={(changes) => href({ ...changes, page: undefined })}
+        agents={filterOptions.agents}
+        forms={filterOptions.forms}
+        showAgent={user.role !== 'agent'}
+        showDepartment={user.role === 'admin' || user.role === 'super_admin'}
+      />
       {canDelete && rows.length ? <LeadBulkActions /> : null}
       {rows.length === 0 ? (
-        <EmptyState title="No leads here" description="New leads from the Google Sheet and WhatsApp appear automatically." />
+        activeFilterCount(filters) ? (
+          <EmptyState title="No leads match these filters" description="Remove a filter above or press Clear all." />
+        ) : (
+          <EmptyState title="No leads here" description="New leads from Facebook / Instagram forms, the Google Sheet and WhatsApp appear automatically." />
+        )
       ) : (
         <>
           <div className="space-y-3 md:hidden">

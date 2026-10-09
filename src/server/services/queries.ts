@@ -2,7 +2,8 @@ import 'server-only'
 import { Types } from 'mongoose'
 import type { Department, KpiKey, LeadStatus, Role, Stage } from '@/domain/constants'
 import type { AttemptView, FollowUpView, KpiItem, LeadDetail, LeadSummary, MessageView, PendingTap, TeamMemberView } from '@/domain/view-models'
-import { pktDateKey } from '@/lib/dates-pkt'
+import { pktDateKey, pktParts } from '@/lib/dates-pkt'
+import { pktMidnight, receivedRange, sourceCondition, type LeadFilters } from '@/domain/lead-filters'
 import { formatPkrCompact } from '@/lib/money'
 import { connectDb } from '@/server/db/connection'
 import { Activity, Attendance, Contact, ContactAttempt, Department as DepartmentModel, DocumentFile, FollowUp, Lead, Message, Notification, Team, User, Visit } from '@/server/db/models'
@@ -32,7 +33,7 @@ interface LeadLike {
   departmentId?: unknown
   stage: string
   status: string
-  source?: { channel?: string | null; campaignName?: string | null; formName?: string | null; ctwa?: { headline?: string | null } | null } | null
+  source?: { channel?: string | null; platform?: string | null; campaignName?: string | null; formName?: string | null; ctwa?: { headline?: string | null; sourceId?: string | null } | null } | null
   assignment?: { agentId?: unknown; state?: string | null; assignedAt?: Date | null } | null
   attemptCount?: number | null
   nextFollowUpAt?: Date | null
@@ -74,6 +75,8 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
     status: l.status as LeadStatus,
     channel: (l.source?.channel ?? 'manual') as LeadSummary['channel'],
     sourceDetail: l.source?.ctwa?.headline ?? l.source?.campaignName ?? l.source?.formName ?? undefined,
+    platform: (l.source?.platform ?? undefined) as LeadSummary['platform'],
+    isAd: !!(l.source?.ctwa?.sourceId || l.source?.ctwa?.headline),
     agent: agentId ? { id: agentId, name: maps.agent.get(agentId) ?? '—' } : undefined,
     assignmentState: state as LeadSummary['assignmentState'],
     attemptCount: l.attemptCount ?? 0,
@@ -96,6 +99,8 @@ export interface LeadListParams {
   page?: number
   sort?: string
   dir?: 'asc' | 'desc'
+  /** "More filters" panel */
+  filters?: LeadFilters
 }
 
 export async function listLeads(user: SessionUser, params: LeadListParams): Promise<{ rows: LeadSummary[]; total: number; counts: Record<LeadView, number> }> {
@@ -128,8 +133,9 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
     or.push({ contactId: { $in: contacts.map((c) => c._id) } })
     extra.$or = or
   }
+  const conds = await filterConditions(user, params.filters ?? {})
   // $and keeps the user's scope even when a view/filter uses the same field.
-  const filter: Record<string, unknown> = { $and: [scope, extra] }
+  const filter: Record<string, unknown> = { $and: [scope, extra, ...conds] }
   const sortField = params.sort === 'followup' ? 'nextFollowUpAt' : params.sort === 'attempts' ? 'attemptCount' : 'receivedAt'
   const page = Math.max(1, params.page ?? 1)
   const [docs, total, countEntries] = await Promise.all([
@@ -139,6 +145,62 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
   ])
   const maps = await lookups(docs)
   return { rows: docs.map((d) => toSummary(d, maps, user)), total, counts: Object.fromEntries(countEntries) as Record<LeadView, number> }
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** Mongo conditions for the "More filters" panel. Each is ANDed with the user's scope, so nothing can widen it. */
+async function filterConditions(user: SessionUser, f: LeadFilters): Promise<Record<string, unknown>[]> {
+  const conds: Record<string, unknown>[] = []
+  if (f.source) conds.push(sourceCondition(f.source))
+  if (f.stage) conds.push({ stage: f.stage })
+  if (f.department && isAdminRole(user.role)) {
+    const dept = await DepartmentModel.findOne({ code: f.department }).select('_id').lean()
+    conds.push({ departmentId: dept?._id ?? null })
+  }
+  if (f.agent && user.role !== 'agent') conds.push(f.agent === 'none' ? { 'assignment.agentId': null } : { 'assignment.agentId': oid(f.agent) })
+  if (f.attempts) conds.push({ attemptCount: f.attempts === '0' ? { $in: [0, null] } : f.attempts === '3plus' ? { $gte: 3 } : Number(f.attempts) })
+  if (f.followup) {
+    const now = new Date()
+    const p = pktParts(now)
+    const today = pktMidnight(p.year, p.month, p.day)
+    const tomorrow = new Date(today.getTime() + 86_400_000)
+    conds.push(
+      f.followup === 'none'
+        ? { nextFollowUpAt: null }
+        : f.followup === 'overdue'
+          ? { nextFollowUpAt: { $lt: now } }
+          : f.followup === 'today'
+            ? { nextFollowUpAt: { $gte: now, $lt: tomorrow } }
+            : { nextFollowUpAt: { $gte: tomorrow } },
+    )
+  }
+  const range = receivedRange(f)
+  if (range.from || range.to) conds.push({ receivedAt: { ...(range.from ? { $gte: range.from } : {}), ...(range.to ? { $lt: range.to } : {}) } })
+  if (f.form) conds.push({ $or: [{ 'source.formName': f.form }, { 'source.campaignName': f.form }] })
+  if (f.city) {
+    const contacts = await Contact.find({ city: new RegExp(escapeRe(f.city), 'i') }).select('_id').limit(2000).lean()
+    conds.push({ contactId: { $in: contacts.map((c) => c._id) } })
+  }
+  return conds
+}
+
+/** Choices for the filter panel: agents the user can see, and form / campaign names of leads in scope. */
+export async function leadFilterOptions(user: SessionUser): Promise<{ agents: { id: string; name: string }[]; forms: string[] }> {
+  await connectDb()
+  const scope = leadScope(user)
+  const [agents, forms, campaigns] = await Promise.all([
+    user.role === 'agent'
+      ? Promise.resolve([])
+      : User.find({ role: { $in: ['agent', 'field_agent'] }, deletedAt: null, ...(isAdminRole(user.role) ? {} : { departmentId: user.departmentId ? oid(user.departmentId) : null }) })
+          .select('name')
+          .sort({ name: 1 })
+          .lean(),
+    Lead.distinct('source.formName', scope),
+    Lead.distinct('source.campaignName', scope),
+  ])
+  const names = [...new Set([...forms, ...campaigns].filter((x): x is string => typeof x === 'string' && !!x.trim()))].sort().slice(0, 200)
+  return { agents: agents.map((a) => ({ id: String(a._id), name: a.name })), forms: names }
 }
 
 export async function getLeadDetail(id: string, user: SessionUser) {

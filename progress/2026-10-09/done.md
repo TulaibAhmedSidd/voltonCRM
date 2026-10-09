@@ -85,3 +85,20 @@
 - The project now lives at https://github.com/TulaibAhmedSidd/voltonCRM (`origin`). The old repo (tulaibpsw/CRMvolt) is kept as remote `crmvolt-old` only for reference.
 - Both histories are joined (merge, no force push). The new repo's extra files (guide page, guide videos and screenshots, recording scripts, loading screen) are kept.
 - Removed `src/components/crm/auto-assign-toggle.tsx`: no page used it, and it called an action that no longer exists, so it broke the type check / build.
+
+## Later — lead sources, Leads filters, quieter polling
+- Lead source names are now clear everywhere (list, card, lead header):
+  - "Facebook form" / "Instagram form" (direct from Meta)
+  - "WhatsApp ad" / "WhatsApp chat"
+  - "Google Sheet · Facebook" (when the Sheet has a platform column), "Manual"
+- Sheet rows now save the Facebook / Instagram platform.
+- Leads page:
+  - Source chips: All, Facebook, Instagram, Meta forms, WhatsApp, WhatsApp ads, Google Sheet, Added by hand.
+  - "Show more filters" panel:
+    - source, stage, department (admins), agent (incl. "Nobody assigned"), tries, next follow-up, form / campaign, city
+    - received: today / yesterday / this week / last 7 days / this month / last month / last 30 days, or a date range (Pakistan time)
+  - The filters in use show as chips that can be removed one by one, plus "Clear all".
+  - Filters live in the URL (links can be shared; Back works). They are always ANDed with the user's scope.
+- The notification bell polls only while the screen is visible, every 30 s instead of 20 s. It checks straight away when the screen is opened again.
+- Checked live Meta: the Page is subscribed to the app for `leadgen` ("Turn on live leads" worked) and Vercel has the verify token. Still to do: the test WhatsApp account is not subscribed to the app.
+- Tests: lead-filters unit tests; filter scope test in security.test.ts.

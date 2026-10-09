@@ -1,4 +1,5 @@
 import { StatusBadge } from '@/components/common/status-badge'
+import { sourceLabel } from '@/domain/lead-filters'
 import type {
   AssignmentState,
   AttendanceStatus,
@@ -6,6 +7,7 @@ import type {
   CustomerResponse,
   Department,
   LeadChannel,
+  AdPlatform,
   LeadStatus,
   ProofFlag,
   ProofStatus,
@@ -45,10 +47,11 @@ export const ResponseBadge = ({ response, size }: { response: CustomerResponse; 
   <StatusBadge {...CUSTOMER_RESPONSE_META[response]} size={size} />
 )
 
-/** Lead source: "Google Sheet · Solar Home Oct" */
-export function SourceBadge({ channel, detail, size }: { channel: LeadChannel; detail?: string; size?: Size }) {
+/** Lead source: "Facebook form · Solar Home Oct", "WhatsApp ad · …", "Google Sheet" */
+export function SourceBadge({ channel, detail, size, platform, isAd }: { channel: LeadChannel; detail?: string; size?: Size; platform?: AdPlatform; isAd?: boolean }) {
   const meta = CHANNEL_META[channel]
-  return <StatusBadge {...meta} label={detail ? `${meta.label} · ${detail}` : meta.label} title={detail} size={size} className="max-w-56" />
+  const name = sourceLabel(channel, platform, isAd) ?? meta.label
+  return <StatusBadge {...meta} label={detail ? `${name} · ${detail}` : name} title={detail ? `${name} · ${detail}` : name} size={size} className="max-w-64" />
 }
 
 /** Proof chip + the reasons it was flagged. */

@@ -18,7 +18,7 @@ interface Item {
   read: boolean
 }
 
-/** Polls /api/me/poll every 20 s (also keeps the timers running if the external cron misses a minute). */
+/** Polls /api/me/poll every 30 s while the screen is visible (alerts; also a backup clock if the external cron misses a minute). */
 export function NotificationBell() {
   const [data, setData] = useState<{ unread: number; items: Item[] }>({ unread: 0, items: [] })
 
@@ -28,11 +28,24 @@ export function NotificationBell() {
       const res = await fetch('/api/me/poll', { cache: 'no-store' }).catch(() => null)
       if (res?.ok && alive) setData(await res.json())
     }
-    load()
-    const id = setInterval(load, 20_000)
+    // Only while the screen is visible: a phone in a pocket or a background tab makes no calls.
+    let id: ReturnType<typeof setInterval> | undefined
+    const start = () => {
+      if (id || document.visibilityState !== 'visible') return
+      load()
+      id = setInterval(load, 30_000)
+    }
+    const stop = () => {
+      clearInterval(id)
+      id = undefined
+    }
+    const onVisibility = () => (document.visibilityState === 'visible' ? start() : stop())
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
     return () => {
       alive = false
-      clearInterval(id)
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 

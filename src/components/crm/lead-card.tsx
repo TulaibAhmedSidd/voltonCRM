@@ -25,7 +25,7 @@ export function LeadCard({ lead, href, showAgent = true, className }: { lead: Le
       <div className="flex flex-wrap gap-1.5">
         <StageBadge stage={lead.stage} size="sm" />
         <DepartmentBadge department={lead.department} size="sm" />
-        <SourceBadge channel={lead.channel} detail={lead.sourceDetail} size="sm" />
+        <SourceBadge channel={lead.channel} detail={lead.sourceDetail} platform={lead.platform} isAd={lead.isAd} size="sm" />
         {lead.assignmentState !== 'accepted' ? <AssignmentBadge state={lead.assignmentState} size="sm" /> : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">

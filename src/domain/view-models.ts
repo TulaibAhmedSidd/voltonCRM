@@ -3,6 +3,7 @@
  * (plain, serialisable — dates are ISO strings). Keeps components independent of the database.
  */
 import type {
+  AdPlatform,
   AssignmentState,
   AttemptChannel,
   AttendanceStatus,
@@ -42,6 +43,10 @@ export interface LeadSummary {
   channel: LeadChannel
   /** Campaign / ad / form name or WhatsApp-ad headline. */
   sourceDetail?: string
+  /** Facebook / Instagram (Meta forms, Sheet rows from Meta) */
+  platform?: AdPlatform
+  /** WhatsApp lead that came from a Click-to-WhatsApp ad */
+  isAd?: boolean
   agent?: AgentRef
   assignmentState: AssignmentState
   attemptCount: number

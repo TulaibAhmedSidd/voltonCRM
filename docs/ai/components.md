@@ -58,6 +58,7 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | LeadBulkActions / LeadSelectBox (client) | lead-bulk-actions.tsx | — / `leadId, label` — managers tick leads → reason → confirm → soft delete (`deleteLeadsAction`) |
 | ProofStorage | proof-storage.tsx | `stats, account, scopeLabel` — Settings → Proof storage: MB used, clear screenshots by date (preview → type CLEAR) |
 | MetaLeadsPanel | meta-leads-panel.tsx | `missing, webhookUrl, state, leadCount` — Settings → Meta lead forms (admins): connection status, Turn on live leads, form → department, Fetch leads from Meta |
+| LeadFilterPanel | lead-filter-panel.tsx | `filters, keep, href, agents, forms, showAgent, showDepartment` — Leads page: source chips + "Show more filters" panel (every column, day / period / date range), removable filter chips |
 | QueuePanel | queue-panel.tsx | `teams` from `getQueuePanels()` — why leads wait + "Assign waiting leads now" |
 | AlertPrefsForm | alert-prefs-form.tsx | `prefs, employees` — Settings → My alerts |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |

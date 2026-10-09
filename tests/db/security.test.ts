@@ -154,6 +154,25 @@ describe('who can see and change what', () => {
     expect(before.rows[0]?.maskPhone).toBe(true)
   })
 
+  it('lead filters (source, date, city, form) work and a manager can never filter into another department', async () => {
+    const id = (r: Awaited<ReturnType<typeof ingestLead>>) => ('leadId' in r ? r.leadId : '')
+    const fb = await ingestLead({ name: 'FB Lead', phone: phone(), city: 'Multan', department: 'INSTALLATION', channel: 'meta_webhook', source: { platform: 'facebook', metaLeadId: 'flt-1', formName: 'Filter test form' } })
+    const ig = await ingestLead({ name: 'IG Lead', phone: phone(), department: 'INSTALLATION', channel: 'meta_webhook', source: { platform: 'instagram', metaLeadId: 'flt-2' } })
+    const old = await ingestLead({ name: 'Old Sheet', phone: phone(), department: 'INSTALLATION', channel: 'sheet', receivedAt: new Date(Date.now() - 40 * 86_400_000) })
+    const other = await ingestLead({ name: 'Trading FB', phone: phone(), department: 'TRADING', channel: 'meta_webhook', source: { platform: 'facebook', metaLeadId: 'flt-3' } })
+    const ids = async (filters: Parameters<typeof listLeads>[1]['filters']) => (await listLeads(mgr, { view: 'all', filters })).rows.map((r) => r.id)
+    const fbIds = await ids({ source: 'facebook' })
+    expect(fbIds).toContain(id(fb))
+    expect(fbIds).not.toContain(id(ig))
+    expect(fbIds).not.toContain(id(other))
+    expect(await ids({ source: 'facebook', department: 'TRADING' })).not.toContain(id(other))
+    expect(await ids({ date: 'last_7' })).not.toContain(id(old))
+    expect(await ids({ from: '2000-01-01' })).toContain(id(old))
+    expect(await ids({ city: 'multan' })).toEqual([id(fb)])
+    expect(await ids({ form: 'Filter test form' })).toEqual([id(fb)])
+    expect((await listLeads(mgr, { view: 'all', filters: { source: 'instagram' } })).rows.find((r) => r.id === id(ig))).toMatchObject({ platform: 'instagram', channel: 'meta_webhook' })
+  })
+
   it('B-03: only internal paths are allowed after login', () => {
     expect(safeNext('//evil.example')).toBe('/dashboard')
     expect(safeNext('/\\evil.example')).toBe('/dashboard')
