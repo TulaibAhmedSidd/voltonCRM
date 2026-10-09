@@ -182,6 +182,12 @@ export const ACTIVITY_TYPES = [
 ] as const
 export type ActivityType = (typeof ACTIVITY_TYPES)[number]
 
+/** Employee actions a manager can follow (Settings → My alerts). */
+export const AGENT_ACTIVITY_EVENTS = ['lead_accepted', 'contact_tap', 'result_logged', 'tap_cancelled', 'checked_in', 'checked_out', 'break', 'visit_update'] as const
+export type AgentActivityEvent = (typeof AGENT_ACTIVITY_EVENTS)[number]
+export const ALERT_SCOPES = ['all', 'selected'] as const
+export type AlertScope = (typeof ALERT_SCOPES)[number]
+
 export const NOTIFICATION_TYPES = [
   'new_lead',
   'lead_unassigned',
@@ -198,6 +204,11 @@ export const NOTIFICATION_TYPES = [
   'visit_assigned',
   'lead_closed',
   'auto_checked_out',
+  'sheet_problem',
+  /** What an employee did (managers choose which ones in Settings → My alerts). */
+  'agent_activity',
+  /** A manager nudged an agent ("please call this lead now"). */
+  'manager_ping',
 ] as const
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
 
@@ -210,7 +221,7 @@ export type WhatsAppNumberStatus = (typeof WHATSAPP_NUMBER_STATUSES)[number]
 export const WHATSAPP_OWNER_TYPES = ['agent', 'department'] as const
 export type WhatsAppOwnerType = (typeof WHATSAPP_OWNER_TYPES)[number]
 
-export const INGEST_SOURCES = ['sheet', 'whatsapp', 'website'] as const
+export const INGEST_SOURCES = ['sheet', 'whatsapp', 'website', 'meta_leads'] as const
 export type IngestSource = (typeof INGEST_SOURCES)[number]
 
 /** Google Sheet rows already handled (by rowKey) — replaces the fragile row-count cursor. */
@@ -223,7 +234,7 @@ export type IngestStatus = (typeof INGEST_STATUSES)[number]
 export const AUDIT_ACTIONS = ['create', 'update', 'soft_delete', 'restore', 'export'] as const
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
 
-export const SETTING_KEYS = ['working_hours', 'holidays', 'sla_defaults', 'sheet_config', 'follow_up_cadence', 'routing', 'theme'] as const
+export const SETTING_KEYS = ['working_hours', 'holidays', 'sla_defaults', 'sheet_config', 'follow_up_cadence', 'routing', 'theme', 'sheet_status', 'meta_leads'] as const
 export type SettingKey = (typeof SETTING_KEYS)[number]
 
 /** Meta lead-form answers (the client's real form questions). */
@@ -323,4 +334,8 @@ export const TEAM_DEFAULTS = {
   maxPendingAccept: 3,
   autoMoveOnAcceptTimeout: false,
   paused: false,
+  /** Only checked-in agents get new leads (the original rule). Off = every active agent in the order. */
+  requireCheckIn: true,
+  /** Leads that arrive at night / on holidays are given out at once instead of waiting for the office to open. */
+  assignOutsideHours: false,
 } as const

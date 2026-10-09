@@ -110,3 +110,56 @@ describe('office hours (PKT)', () => {
     expect(nextOpening(new Date('2026-10-04T06:00:00Z'), hours).toISOString()).toBe('2026-10-05T05:00:00.000Z')
   })
 })
+
+describe('usernames are cleaned, not rejected', () => {
+  it('turns what people type into a valid sign-in name', async () => {
+    const { normalizeUsername, usernameProblem } = await import('@/lib/username')
+    expect(normalizeUsername('Talha Khan')).toBe('talha.khan')
+    expect(normalizeUsername('  WAJI_Ahmed ')).toBe('waji_ahmed')
+    expect(normalizeUsername('Ali@123')).toBe('ali123')
+    expect(normalizeUsername('..Sana..  Iqbal--')).toBe('sana.iqbal')
+    expect(normalizeUsername('Muhammad Abdul Rehman Siddiqui Khan')).toHaveLength(30)
+    expect(usernameProblem(normalizeUsername('a!'))).toMatch(/at least 3/)
+    expect(usernameProblem('talha.khan')).toBeNull()
+  })
+})
+
+describe('Sheet column-change guard', () => {
+  it('stops only when a key column (phone / date / lead id) appears or disappears', async () => {
+    const { keyColumnChange } = await import('@/domain/sheet-columns')
+    const before = { phone: 'phone_number', submittedAt: 'created_time', name: 'full_name' }
+    expect(keyColumnChange(undefined, { phone: 'x' })).toBeNull() // first sync
+    expect(keyColumnChange(before, { phone: 'Phone Number', submittedAt: 'Date', name: 'Name' })).toBeNull() // renamed but still recognised
+    expect(keyColumnChange(before, { phone: 'phone_number', submittedAt: 'created_time' })).toBeNull() // name lost: warning only
+    expect(keyColumnChange(before, { phone: 'phone_number' })).toMatch(/"created_time" \(date\) is missing/)
+    expect(keyColumnChange(before, { phone: 'phone_number', submittedAt: 'created_time', metaLeadId: 'id' })).toMatch(/new column "id"/)
+  })
+})
+
+describe('lead journey (steps + what to do now)', () => {
+  const label = { result: (r: string) => r, response: (r: string) => r, when: (iso: string) => iso.slice(0, 10) }
+  it('walks Accept → Try 1–3 → Close → Manager check', async () => {
+    const { leadJourney } = await import('@/domain/lead-journey')
+    const base = { status: 'open' as const, closeReview: 'none', acceptWithinMin: 5, label: label as never }
+    const notAccepted = leadJourney({ ...base, assignmentState: 'assigned', attempts: [], assignedAt: '2026-10-08T06:00:00Z' })
+    expect(notAccepted.steps[0].state).toBe('current')
+    expect(notAccepted.next.title).toMatch(/Accept this lead/)
+    const first = leadJourney({ ...base, assignmentState: 'accepted', attempts: [] })
+    expect(first.next.title).toMatch(/First contact/)
+    expect(first.steps[1].state).toBe('current')
+    const tries = [
+      { tappedAt: '2026-10-06T06:00:00Z', loggedAt: '2026-10-06T06:01:00Z', result: 'no_answer' as const },
+      { tappedAt: '2026-10-07T06:00:00Z', loggedAt: '2026-10-07T06:01:00Z', result: 'could_not_call' as const }, // not a try
+      { tappedAt: '2026-10-07T07:00:00Z', loggedAt: '2026-10-07T07:01:00Z', cancelled: true }, // mistake, not a try
+    ]
+    const due = leadJourney({ ...base, assignmentState: 'accepted', attempts: tries, nextFollowUpAt: '2026-10-07T06:00:00Z', now: new Date('2026-10-08T06:00:00Z') })
+    expect(due.tryNumber).toBe(2)
+    expect(due.next.title).toMatch(/Try 2 of 3 is due now/)
+    const later = leadJourney({ ...base, assignmentState: 'accepted', attempts: tries, nextFollowUpAt: '2026-10-10T06:00:00Z', now: new Date('2026-10-08T06:00:00Z') })
+    expect(later.next.text).toMatch(/Nothing to do now/)
+    const won = leadJourney({ ...base, status: 'won', closeReview: 'pending', assignmentState: 'accepted', attempts: tries })
+    expect(won.steps.find((s) => s.key === 'close')?.state).toBe('done')
+    expect(won.steps.find((s) => s.key === 'check')?.state).toBe('current')
+    expect(won.next.title).toMatch(/Waiting for the manager/)
+  })
+})

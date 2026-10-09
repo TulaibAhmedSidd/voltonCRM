@@ -1,20 +1,30 @@
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
-import { SelectField, TextAreaField, TextField } from '@/components/common/fields'
+import { SelectField, TextField } from '@/components/common/fields'
+import { UsernameField } from '@/components/common/username-field'
+import { SheetSources } from '@/components/crm/sheet-sources'
+import { AlertPrefsForm } from '@/components/crm/alert-prefs-form'
+import { ProofStorage } from '@/components/crm/proof-storage'
+import { MetaLeadsPanel } from '@/components/crm/meta-leads-panel'
+import { metaMissing } from '@/server/services/meta-leads'
+import { headers } from 'next/headers'
+import { proofStorageStats } from '@/server/services/storage'
+import { cloudinaryUsage } from '@/server/services/cloudinary'
+import { Lead, User } from '@/server/db/models'
+import { prefsOf } from '@/server/services/watch'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionCard } from '@/components/common/section-card'
-import { StatusBadge } from '@/components/common/status-badge'
 import { UserAdminList } from '@/components/crm/user-admin-list'
 import type { Role } from '@/domain/constants'
 import { en } from '@/i18n/en'
 import { requireRole } from '@/server/auth/session'
-import { isAdminRole, leadScope } from '@/server/auth/scope'
+import { isAdminRole } from '@/server/auth/scope'
 import { connectDb } from '@/server/db/connection'
-import { DocumentFile, Lead, SheetRow } from '@/server/db/models'
-import { createUserAction, purgeDataAction, pullSheetAction, saveSheetConfigAction, saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
+import { createUserAction, saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
 import { listDepartments, listUsers } from '@/server/services/queries'
 import { getSetting } from '@/server/services/settings'
-import { previewSheet } from '@/server/services/sheet'
+import { getSheetSources, statusKey } from '@/server/services/sheet'
+import type { SheetTabStatus } from '@/domain/sheet-columns'
 import { THEME_PRESETS } from '@/styles/runtime-theme'
 
 export const metadata = { title: 'Settings' }
@@ -31,28 +41,21 @@ export default async function SettingsPage() {
   const user = await requireRole('admin', 'manager')
   const admin = isAdminRole(user.role)
   await connectDb()
-  const scope = leadScope(user)
-  const [users, departments, sheet, hours, theme, screenshotCount, junkLeadCount] = await Promise.all([
-    listUsers(user),
-    listDepartments(),
-    getSetting('sheet_config'),
-    getSetting('working_hours'),
-    getSetting('theme'),
-    DocumentFile.countDocuments({ category: 'screenshot', deletedAt: null }),
-    Lead.countDocuments({ $and: [scope, { status: { $in: ['unreachable', 'junk'] } }] }),
-  ])
-  const [preview, rowStats, failedRows] = admin
-    ? await Promise.all([
-        sheet.spreadsheetId ? previewSheet().catch((e: Error) => e.message) : Promise.resolve(null),
-        SheetRow.aggregate<{ _id: string; n: number; last: Date }>([{ $group: { _id: '$status', n: { $sum: 1 }, last: { $max: '$updatedAt' } } }]),
-        SheetRow.find({ status: 'failed' }).sort({ updatedAt: -1 }).limit(5).lean(),
-      ])
-    : [null, [], []]
+  const [users, departments, allSheets, sheetStatus, hours, theme] = await Promise.all([listUsers(user), listDepartments(), getSheetSources(), getSetting('sheet_status'), getSetting('working_hours'), getSetting('theme')])
+  const [me, proofStats, cloudAccount] = await Promise.all([User.findById(user.id).select('role alertPrefs').lean(), proofStorageStats(user), cloudinaryUsage()])
+  const myAlerts = prefsOf(me ?? { role: user.role })
+  const [metaState, metaLeadCount] = admin ? await Promise.all([getSetting('meta_leads'), Lead.countDocuments({ 'source.channel': 'meta_webhook' })]) : [null, 0]
+  const host = (await headers()).get('host') ?? 'your-app.vercel.app'
+  const webhookUrl = `${host.startsWith('localhost') ? 'http' : 'https'}://${host}/api/webhooks/meta-leads`
+  const employees = users.filter((u) => (u.role === 'agent' || u.role === 'field_agent') && u.isActive).map((u) => ({ id: u.id, name: u.name, role: u.role }))
+  // Managers see and manage only their department's sheets.
+  const sheets = admin ? allSheets : allSheets.filter((s) => s.department === user.departmentCode)
+  const statusOf: Record<string, Record<string, SheetTabStatus | undefined>> = Object.fromEntries(sheets.map((s) => [s.id, Object.fromEntries(s.tabs.map((t) => [t, sheetStatus[statusKey(s, t)]]))]))
   const roleOptions = creatable(user.role).map((r) => ({ value: r, label: en.role[r] }))
 
   return (
     <>
-      <PageHeader title="Settings" description={user.role === 'manager' ? 'Add your call agents and field agents, and manage department data maintenance.' : undefined} />
+      <PageHeader title="Settings" description={user.role === 'manager' ? 'Add your call agents and field agents. New people choose their own password at first sign-in.' : undefined} />
 
       <SectionCard title="Users" description="New users must choose their own password at first sign-in. Call agents join their department's assignment order automatically.">
         <div className="grid gap-6 lg:grid-cols-2">
@@ -61,10 +64,10 @@ export default async function SettingsPage() {
             <p className="font-medium">Add a user</p>
             <TextField label="Full name" name="name" required />
             <div className="grid gap-3 sm:grid-cols-2">
-              <TextField label="Username (for sign in)" name="username" required autoCapitalize="none" autoComplete="off" pattern="[a-z0-9._\-]{3,30}" />
-              <TextField label="Temporary password (8+)" name="password" type="text" minLength={8} required autoComplete="off" hint="They change it at first sign-in" />
-              <TextField label="Phone" name="phone" inputMode="tel" />
-              <TextField label="Email (optional)" name="email" type="email" />
+              <UsernameField />
+              <TextField label="Temporary password" name="password" type="text" minLength={8} required autoComplete="off" hint="At least 8 characters, not 12345678. They choose their own at first sign-in." />
+              <TextField label="Phone (optional)" name="phone" inputMode="tel" placeholder="0300 1234567" hint="03XX XXXXXXX or +92…" />
+              <TextField label="Email (optional)" name="email" type="email" hint="Leave empty if they have none" />
               <SelectField label="Role" name="role" defaultValue="agent" options={roleOptions} />
               {admin ? <SelectField label="Department" name="departmentId" placeholder="—" options={departments.map((d) => ({ value: d.id, label: d.name }))} /> : null}
             </div>
@@ -75,68 +78,31 @@ export default async function SettingsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard
-        title="Data Maintenance & Storage Clean-up"
-        description="Safely clean up screenshot attachments, archive dead/junk inquiries, or clear sync errors to keep the system fast and storage light."
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Screenshot Proofs</p>
-                <StatusBadge label={`${screenshotCount} stored`} tone="neutral" size="sm" />
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Purge screenshot file attachments from call attempts to free up file storage. Call logs, timestamps, and customer outcomes remain preserved.
-              </p>
-            </div>
-            <ActionForm action={purgeDataAction} className="mt-4">
-              <input type="hidden" name="target" value="screenshots" />
-              <Button type="submit" variant="outline" size="touch" className="w-full">
-                Purge Screenshots
-              </Button>
-            </ActionForm>
-          </div>
+      <section id="my-alerts" className="scroll-mt-20">
+        <SectionCard title="My alerts" description="Choose what your employees do that you want to hear about — for everyone, or only some people.">
+          <AlertPrefsForm prefs={myAlerts} employees={employees} />
+        </SectionCard>
+      </section>
 
-          <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Dead & Junk Leads</p>
-                <StatusBadge label={`${junkLeadCount} leads`} tone="neutral" size="sm" />
-              </div>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Archive leads with status Unreachable or Junk that have exhausted contact attempts. Keeps active pipelines clean and unburdened.
-              </p>
-            </div>
-            <ActionForm action={purgeDataAction} className="mt-4">
-              <input type="hidden" name="target" value="junk_leads" />
-              <Button type="submit" variant="outline" size="touch" className="w-full">
-                Archive Dead Leads
-              </Button>
-            </ActionForm>
-          </div>
+      <section id="proof-storage" className="scroll-mt-20">
+        <SectionCard title="Proof storage" description="Screenshots your agents attach to calls and chats. See how much space they use and clear old ones.">
+          <ProofStorage stats={proofStats} account={cloudAccount} scopeLabel={admin ? 'All departments' : 'Your department'} />
+        </SectionCard>
+      </section>
 
-          {admin ? (
-            <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">Failed Sheet Rows</p>
-                  <StatusBadge label={`${failedRows.length} failed`} tone={failedRows.length > 0 ? 'danger' : 'neutral'} size="sm" />
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Reset failed Google Sheet import records so the next sync attempt can re-parse and retry ingesting them.
-                </p>
-              </div>
-              <ActionForm action={purgeDataAction} className="mt-4">
-                <input type="hidden" name="target" value="sheet_errors" />
-                <Button type="submit" variant="outline" size="touch" className="w-full">
-                  Reset Failed Rows
-                </Button>
-              </ActionForm>
-            </div>
-          ) : null}
-        </div>
-      </SectionCard>
+      <section id="google-sheets" className="scroll-mt-20">
+        <SectionCard title="Google Sheets" description={admin ? 'Every connected Sheet, by department. New rows are synced every minute.' : 'Connect your department\'s leads Sheet. New rows are synced every minute and go to your team.'}>
+          <SheetSources sources={sheets} statusOf={statusOf} isAdmin={admin} defaultDepartment={user.departmentCode} />
+        </SectionCard>
+      </section>
+
+      {admin && metaState ? (
+        <section id="meta-leads" className="scroll-mt-20">
+          <SectionCard title="Meta lead forms (Facebook / Instagram)" description="Leads from your Meta instant forms come straight into the CRM — no Google Sheet needed.">
+            <MetaLeadsPanel missing={metaMissing()} webhookUrl={webhookUrl} state={metaState} leadCount={metaLeadCount} />
+          </SectionCard>
+        </section>
+      ) : null}
 
       {admin ? (
         <>
@@ -172,75 +138,6 @@ export default async function SettingsPage() {
                 Save colours
               </Button>
             </ActionForm>
-          </SectionCard>
-
-          <SectionCard title="Google Sheet" description='Share the Sheet as "Anyone with the link → Viewer" and keep the link private (it shows customer phones). The CRM reads new rows every minute.'>
-            <div className="grid gap-6 lg:grid-cols-2">
-              <ActionForm action={saveSheetConfigAction}>
-                <TextField label="Sheet link" name="spreadsheet" defaultValue={sheet.spreadsheetId ? `https://docs.google.com/spreadsheets/d/${sheet.spreadsheetId}` : ''} required />
-                <TextField label="Tabs to read (Tab:DEPARTMENT, comma separated)" name="tabs" defaultValue={sheet.tabs.map((t) => (t.department ? `${t.name}:${t.department}` : t.name)).join(', ')} hint="e.g. Leads:INSTALLATION — leave the department off to route by campaign keywords" />
-                <TextAreaField label='Column overrides (JSON), e.g. {"Client Name": "name", "Junk": "ignore"}' name="headerOverrides" rows={3} defaultValue={JSON.stringify(sheet.headerOverrides)} />
-                <Button type="submit" size="touch">
-                  Save Sheet settings
-                </Button>
-              </ActionForm>
-              <div className="space-y-3">
-                <ActionForm action={pullSheetAction}>
-                  <SelectField
-                    label="Pull now"
-                    name="mode"
-                    defaultValue="live"
-                    options={[
-                      { value: 'live', label: 'New rows only (normal)' },
-                      { value: 'history', label: 'First time: import ALL rows as history (match Call Agent names, no alerts)' },
-                      { value: 'skip', label: 'First time: skip existing rows — start from now' },
-                    ]}
-                  />
-                  <Button type="submit" variant="secondary" size="touch" className="w-full">
-                    Run
-                  </Button>
-                </ActionForm>
-                <p className="text-xs text-muted-foreground">
-                  Rows handled:{' '}
-                  {rowStats.length
-                    ? rowStats.map((r) => `${r._id} ${r.n}`).join(' · ')
-                    : 'none yet — choose a "First time" option once'}
-                </p>
-                {failedRows.length ? (
-                  <div className="rounded-lg bg-tone-danger-soft p-3 text-xs text-tone-danger-soft-foreground">
-                    <p className="font-medium">Rows that could not be imported (tried 3 times):</p>
-                    <ul className="mt-1 list-disc ps-4">
-                      {failedRows.map((r) => (
-                        <li key={String(r._id)}>
-                          Row {r.sheetRow}: {r.error}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-            {typeof preview === 'string' ? <p className="mt-3 text-sm text-destructive">{preview}</p> : null}
-            {Array.isArray(preview)
-              ? preview.map((p) => (
-                  <div key={p.tab} className="mt-4 space-y-2 text-sm">
-                    <p className="font-medium">
-                      Tab “{p.tab}” — {p.rows} rows
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {Object.entries(p.detection.mapping).map(([h, f]) => (
-                        <StatusBadge key={h} label={`${h} → ${en.sheetField[f]}`} tone="success" size="sm" />
-                      ))}
-                      {p.detection.dynamic.map((h) => (
-                        <StatusBadge key={h} label={`${h} → kept as extra`} tone="neutral" size="sm" />
-                      ))}
-                      {p.detection.missingRequired.map((f) => (
-                        <StatusBadge key={f} label={`Missing: ${en.sheetField[f]}`} tone="danger" size="sm" />
-                      ))}
-                    </div>
-                  </div>
-                ))
-              : null}
           </SectionCard>
 
           <SectionCard title="Working hours (Pakistan time)" description="Night and holiday leads wait for the morning. Agents are checked out automatically 30 minutes after closing.">

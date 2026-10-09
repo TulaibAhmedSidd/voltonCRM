@@ -78,7 +78,6 @@ export function AppShell({ role, userName, actions, children }: AppShellProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                prefetch={true}
                 aria-current={active ? 'page' : undefined}
                 className={cn('flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium', active ? 'text-foreground' : 'text-muted-foreground')}
               >
@@ -98,7 +97,6 @@ function SideLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
       href={item.href}
-      prefetch={true}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',

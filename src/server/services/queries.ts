@@ -1,16 +1,29 @@
 import 'server-only'
 import { Types } from 'mongoose'
 import type { Department, KpiKey, LeadStatus, Role, Stage } from '@/domain/constants'
-import type { AttemptView, FollowUpView, KpiItem, LeadDetail, LeadSummary, MessageView, TeamMemberView } from '@/domain/view-models'
-import { pktDateKey, pktParts } from '@/lib/dates-pkt'
+import type { AttemptView, FollowUpView, KpiItem, LeadDetail, LeadSummary, MessageView, PendingTap, TeamMemberView } from '@/domain/view-models'
+import { pktDateKey } from '@/lib/dates-pkt'
 import { formatPkrCompact } from '@/lib/money'
 import { connectDb } from '@/server/db/connection'
-import { Activity, Attendance, Contact, ContactAttempt, Department as DepartmentModel, FollowUp, Lead, Message, Notification, Team, User, Visit } from '@/server/db/models'
+import { Activity, Attendance, Contact, ContactAttempt, Department as DepartmentModel, DocumentFile, FollowUp, Lead, Message, Notification, Team, User, Visit } from '@/server/db/models'
 import type { SessionUser } from '@/server/auth/session'
 import { isAdminRole, leadScope, visitScope } from '@/server/auth/scope'
 import { oid } from '@/server/services/common'
+import { queueReport } from '@/server/services/assignment'
 
 const iso = (d?: Date | null) => (d ? new Date(d).toISOString() : undefined)
+
+/** Screenshot ids of these attempts that still exist (not cleared from proof storage). */
+async function liveDocIds(attempts: { proof?: { docIds?: unknown[] } | null }[]): Promise<Set<string>> {
+  const ids = attempts.flatMap((a) => a.proof?.docIds ?? []).map(String)
+  if (!ids.length) return new Set()
+  return new Set((await DocumentFile.find({ _id: { $in: ids }, deletedAt: null }).select('_id').lean()).map((d) => String(d._id)))
+}
+const screenshotOf = (a: { proof?: { docIds?: unknown[] } | null }, live: Set<string>) => {
+  const id = a.proof?.docIds?.[0] ? String(a.proof.docIds[0]) : null
+  if (!id) return {}
+  return live.has(id) ? { screenshotUrl: `/api/documents/${id}` } : { screenshotCleared: true }
+}
 
 interface LeadLike {
   _id: unknown
@@ -72,44 +85,10 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
 
 export const LEAD_VIEWS = ['all', 'new', 'unassigned', 'mine', 'followups', 'interested', 'lost', 'unreachable'] as const
 export type LeadView = (typeof LEAD_VIEWS)[number]
-
-export const DATE_FILTERS = ['all', 'today', 'yesterday', 'week', 'month'] as const
-export type DateFilter = (typeof DATE_FILTERS)[number]
-
 export const PAGE_SIZE = 25
-
-export function dateFilterRange(dateFilter: DateFilter | undefined): { $gte?: Date; $lte?: Date } | null {
-  if (!dateFilter || dateFilter === 'all') return null
-  const now = new Date()
-  const p = pktParts(now)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const todayStart = new Date(`${p.year}-${pad(p.month)}-${pad(p.day)}T00:00:00+05:00`)
-  const todayEnd = new Date(`${p.year}-${pad(p.month)}-${pad(p.day)}T23:59:59.999+05:00`)
-
-  if (dateFilter === 'today') {
-    return { $gte: todayStart, $lte: todayEnd }
-  }
-  if (dateFilter === 'yesterday') {
-    const yesterdayDate = new Date(todayStart.getTime() - 86_400_000)
-    const yP = pktParts(yesterdayDate)
-    const yStart = new Date(`${yP.year}-${pad(yP.month)}-${pad(yP.day)}T00:00:00+05:00`)
-    const yEnd = new Date(`${yP.year}-${pad(yP.month)}-${pad(yP.day)}T23:59:59.999+05:00`)
-    return { $gte: yStart, $lte: yEnd }
-  }
-  if (dateFilter === 'week') {
-    const weekStart = new Date(todayStart.getTime() - 6 * 86_400_000)
-    return { $gte: weekStart, $lte: todayEnd }
-  }
-  if (dateFilter === 'month') {
-    const monthStart = new Date(`${p.year}-${pad(p.month)}-01T00:00:00+05:00`)
-    return { $gte: monthStart, $lte: todayEnd }
-  }
-  return null
-}
 
 export interface LeadListParams {
   view?: LeadView
-  date?: DateFilter
   q?: string
   department?: Department
   stage?: Stage
@@ -119,7 +98,7 @@ export interface LeadListParams {
   dir?: 'asc' | 'desc'
 }
 
-export async function listLeads(user: SessionUser, params: LeadListParams): Promise<{ rows: LeadSummary[]; total: number; counts: Record<LeadView, number>; dateCounts: Record<DateFilter, number> }> {
+export async function listLeads(user: SessionUser, params: LeadListParams): Promise<{ rows: LeadSummary[]; total: number; counts: Record<LeadView, number> }> {
   await connectDb()
   const scope = leadScope(user)
   const views: Record<LeadView, Record<string, unknown>> = {
@@ -139,10 +118,6 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
     const dept = await DepartmentModel.findOne({ code: params.department }).lean()
     if (dept && isAdminRole(user.role)) extra.departmentId = dept._id
   }
-  const dateRange = dateFilterRange(params.date)
-  if (dateRange) {
-    extra.receivedAt = dateRange
-  }
   if (params.q?.trim()) {
     const q = params.q.trim()
     const digits = q.replace(/\D/g, '')
@@ -157,23 +132,13 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
   const filter: Record<string, unknown> = { $and: [scope, extra] }
   const sortField = params.sort === 'followup' ? 'nextFollowUpAt' : params.sort === 'attempts' ? 'attemptCount' : 'receivedAt'
   const page = Math.max(1, params.page ?? 1)
-  const [docs, total, countEntries, dateCountEntries] = await Promise.all([
+  const [docs, total, countEntries] = await Promise.all([
     Lead.find(filter).sort({ [sortField]: params.dir === 'asc' ? 1 : -1 }).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).lean(),
     Lead.countDocuments(filter),
     Promise.all(LEAD_VIEWS.map(async (v) => [v, await Lead.countDocuments({ $and: [scope, views[v]] })] as const)),
-    Promise.all(DATE_FILTERS.map(async (df) => {
-      const range = dateFilterRange(df)
-      const q: Record<string, unknown> = range ? { receivedAt: range } : {}
-      return [df, await Lead.countDocuments({ $and: [scope, views[params.view ?? 'all'], q] })] as const
-    })),
   ])
   const maps = await lookups(docs)
-  return {
-    rows: docs.map((d) => toSummary(d, maps, user)),
-    total,
-    counts: Object.fromEntries(countEntries) as Record<LeadView, number>,
-    dateCounts: Object.fromEntries(dateCountEntries) as Record<DateFilter, number>,
-  }
+  return { rows: docs.map((d) => toSummary(d, maps, user)), total, counts: Object.fromEntries(countEntries) as Record<LeadView, number> }
 }
 
 export async function getLeadDetail(id: string, user: SessionUser) {
@@ -192,6 +157,7 @@ export async function getLeadDetail(id: string, user: SessionUser) {
     Lead.find({ $and: [{ contactId: lead.contactId, _id: { $ne: lead._id } }, leadScope(user)] }).select('leadNo departmentId status').lean(),
   ])
   const people = new Map((await User.find({ _id: { $in: [...attempts.map((a) => a.agentId), ...activities.map((a) => a.actorId).filter(Boolean), ...messages.map((m) => m.sentByUserId).filter(Boolean)] } }).select('name').lean()).map((u) => [String(u._id), u.name]))
+  const liveDocs = await liveDocIds(attempts)
   const summary = toSummary(lead, maps, user)
   const detail: LeadDetail = {
     ...summary,
@@ -215,9 +181,10 @@ export async function getLeadDetail(id: string, user: SessionUser) {
     result: (a.result ?? undefined) as AttemptView['result'],
     response: (a.response ?? undefined) as AttemptView['response'],
     remarks: a.remarks ?? undefined,
-    screenshotUrl: a.proof?.docIds?.length ? `/api/documents/${a.proof.docIds[0]}` : undefined,
+    ...screenshotOf(a, liveDocs),
     proofStatus: a.proofStatus as AttemptView['proofStatus'],
     flags: (a.flags ?? []) as AttemptView['flags'],
+    cancelled: !!a.cancelled,
     reviewStatus: (a.review?.status ?? 'pending') as AttemptView['reviewStatus'],
   }))
   const messageViews: MessageView[] = messages.map((m) => ({
@@ -231,7 +198,7 @@ export async function getLeadDetail(id: string, user: SessionUser) {
   }))
   return {
     lead: detail,
-    raw: { departmentId: lead.departmentId ? String(lead.departmentId) : null, site: lead.site ?? {}, trading: lead.trading ?? {}, extra: (lead.extra ?? {}) as Record<string, string>, lostReason: lead.lostReason, closeReview: (lead.closeReview?.status ?? 'none') as string, wonValuePkr: lead.wonValuePkr ?? null, pendingAttempt: attemptViews.find((a) => !a.loggedAt && a.agent.id === user.id)?.id ?? null },
+    raw: { departmentId: lead.departmentId ? String(lead.departmentId) : null, site: lead.site ?? {}, trading: lead.trading ?? {}, extra: (lead.extra ?? {}) as Record<string, string>, lostReason: lead.lostReason, closeReview: (lead.closeReview?.status ?? 'none') as string, wonValuePkr: lead.wonValuePkr ?? null, pendingAttempt: ((p) => (p ? { id: p.id, channel: p.channel, tappedAt: p.tappedAt } : null))(attemptViews.find((a) => !a.loggedAt && a.agent.id === user.id)) as PendingTap | null, acceptWithinMin: lead.teamId ? ((await Team.findById(lead.teamId).select('acceptWithinMin').lean())?.acceptWithinMin ?? 5) : 5 },
     attempts: attemptViews,
     followUps: followUps.map((f) => ({ id: String(f._id), leadId: String(f.leadId), leadName: detail.name, number: f.number, dueAt: iso(f.dueAt)!, status: f.status, isOverdue: f.status === 'pending' && f.dueAt < new Date() }) as FollowUpView),
     activities: activities.map((a) => ({ id: String(a._id), type: a.type, at: iso(a.at)!, actor: a.actorId ? people.get(String(a.actorId)) : undefined, data: (a.data ?? {}) as Record<string, unknown> })),
@@ -303,7 +270,7 @@ export async function getTeamBoard(user: SessionUser): Promise<TeamMemberView[]>
     Attendance.find({ userId: { $in: ids }, date: pktDateKey(new Date()) }).lean(),
     Lead.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { 'assignment.agentId': { $in: ids }, status: 'open' } }, { $group: { _id: '$assignment.agentId', n: { $sum: 1 } } }]),
     Lead.aggregate<{ _id: Types.ObjectId; n: number }>([{ $match: { 'assignment.agentId': { $in: ids }, status: 'open', 'assignment.state': 'assigned' } }, { $group: { _id: '$assignment.agentId', n: { $sum: 1 } } }]),
-    ContactAttempt.aggregate<{ _id: Types.ObjectId; at: Date }>([{ $match: { agentId: { $in: ids }, outcomeAt: { $ne: null } } }, { $group: { _id: '$agentId', at: { $max: '$outcomeAt' } } }]),
+    ContactAttempt.aggregate<{ _id: Types.ObjectId; at: Date }>([{ $match: { agentId: { $in: ids }, outcomeAt: { $ne: null }, cancelled: { $ne: true } } }, { $group: { _id: '$agentId', at: { $max: '$outcomeAt' } } }]),
   ])
   const by = <T extends { _id: unknown }>(rows: T[]) => new Map(rows.map((r) => [String(r._id), r]))
   const att = new Map(attendance.map((a) => [String(a.userId), a]))
@@ -335,8 +302,16 @@ export async function getTeams(user: SessionUser) {
     manager: name.get(String(t.managerId)) ?? '—',
     members: t.memberOrder.map((id: Types.ObjectId) => ({ id: String(id), name: name.get(String(id)) ?? '—' })),
     lastUid: t.rr?.lastUid ? String(t.rr.lastUid) : null,
-    settings: { managerWindowMin: t.managerWindowMin, acceptWithinMin: t.acceptWithinMin, contactWithinMin: t.contactWithinMin, maxPendingAccept: t.maxPendingAccept, autoMoveOnAcceptTimeout: t.autoMoveOnAcceptTimeout, paused: t.paused },
+    settings: { managerWindowMin: t.managerWindowMin, acceptWithinMin: t.acceptWithinMin, contactWithinMin: t.contactWithinMin, maxPendingAccept: t.maxPendingAccept, autoMoveOnAcceptTimeout: t.autoMoveOnAcceptTimeout, paused: t.paused, requireCheckIn: t.requireCheckIn !== false, assignOutsideHours: !!t.assignOutsideHours },
   }))
+}
+
+/** Queue status per team in the user's scope (managers: their team; admins: all) — for the "why are leads waiting" panel. */
+export async function getQueuePanels(user: SessionUser) {
+  await connectDb()
+  const teams = await Team.find(user.role === 'manager' ? { departmentId: user.departmentId ? oid(user.departmentId) : null } : {}).select('_id name').lean()
+  const reports = await Promise.all(teams.map(async (t) => ({ t, r: await queueReport(t._id) })))
+  return reports.filter((x) => x.r).map(({ t, r }) => ({ teamId: String(t._id), teamName: t.name, ready: r!.ready, held: r!.held, checkedIn: r!.checkedIn, agents: r!.agents, reasons: r!.reasons }))
 }
 
 export async function getReviewQueue(user: SessionUser) {
@@ -350,6 +325,7 @@ export async function getReviewQueue(user: SessionUser) {
     ContactAttempt.find({ ...base, proofStatus: 'evidenced', flags: { $nin: ['lead_closed', 'spot_check'] } }).sort({ serverTapAt: -1 }).limit(30).lean(),
   ])
   const attempts = [...urgent, ...spot, ...evidenced]
+  const liveDocs = await liveDocIds(attempts)
   const people = new Map((await User.find({ _id: { $in: attempts.map((a) => a.agentId) } }).select('name').lean()).map((u) => [String(u._id), u.name]))
   const leads = new Map((await Lead.find({ _id: { $in: attempts.map((a) => a.leadId) } }).select('leadNo').lean()).map((l) => [String(l._id), l.leadNo]))
   return attempts.map((a) => ({
@@ -367,7 +343,7 @@ export async function getReviewQueue(user: SessionUser) {
       result: a.result ?? undefined,
       response: a.response ?? undefined,
       remarks: a.remarks ?? undefined,
-      screenshotUrl: a.proof?.docIds?.length ? `/api/documents/${a.proof.docIds[0]}` : undefined,
+      ...screenshotOf(a, liveDocs),
       proofStatus: a.proofStatus,
       flags: a.flags ?? [],
       reviewStatus: a.review?.status ?? 'pending',

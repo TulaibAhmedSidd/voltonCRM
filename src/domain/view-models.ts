@@ -74,9 +74,20 @@ export interface AttemptView {
   response?: CustomerResponse
   remarks?: string
   screenshotUrl?: string
+  /** The screenshot existed but a manager cleared proof storage. */
+  screenshotCleared?: boolean
   proofStatus: ProofStatus
   flags: ProofFlag[]
   reviewStatus: ReviewStatus
+  /** "Tapped by mistake" — not a try. */
+  cancelled?: boolean
+}
+
+/** An unsaved tap of the signed-in agent on a lead (the result sheet must be filled or the tap cancelled). */
+export interface PendingTap {
+  id: string
+  channel: AttemptChannel
+  tappedAt: string
 }
 
 export interface FollowUpView {

@@ -12,13 +12,13 @@ import { FollowUpItem } from '@/components/crm/follow-up-item'
 import { KpiGrid } from '@/components/crm/kpi-grid'
 import { LeadCard } from '@/components/crm/lead-card'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
-import { AutoAssignToggle } from '@/components/crm/auto-assign-toggle'
 import { VISIT_STATUS_META } from '@/domain/ui-maps'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { acceptLeadAction, checkInAction, checkOutAction, toggleBreakAction } from '@/server/actions'
 import { getAttendance } from '@/server/services/assignment'
-import { getKpis, getTeamBoard, getTeams, listFollowUps, listLeads, listVisits } from '@/server/services/queries'
+import { getKpis, getQueuePanels, getTeamBoard, listFollowUps, listLeads, listVisits } from '@/server/services/queries'
+import { QueuePanel } from '@/components/crm/queue-panel'
 
 export const metadata = { title: 'Dashboard' }
 
@@ -105,28 +105,13 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
     )
   }
 
-  const [kpis, board, queue, followUps, teams] = await Promise.all([
-    getKpis(user),
-    getTeamBoard(user),
-    listLeads(user, { view: 'unassigned' }),
-    listFollowUps(user),
-    getTeams(user),
-  ])
-  const team = teams.find((t) => t.departmentId === user.departmentId) ?? teams[0]
-  const isAutoAssign = team ? !team.settings.paused && team.settings.managerWindowMin === 0 : false
+  const [kpis, board, queue, followUps, queuePanels] = await Promise.all([getKpis(user), getTeamBoard(user), listLeads(user, { view: 'unassigned' }), listFollowUps(user), getQueuePanels(user)])
   const overdue = followUps.filter((f) => f.isOverdue)
   const checkedIn = board.filter((m) => m.attendance === 'checked_in').length
   return (
     <>
       <PageHeader title={greeting} description={user.role === 'admin' || user.role === 'super_admin' ? 'Whole company' : `${user.departmentCode === 'TRADING' ? 'Trading' : 'Installation'} department`} />
       {noticeEl}
-      {team ? (
-        <AutoAssignToggle
-          teamId={team.id}
-          initialEnabled={isAutoAssign}
-          teamName={user.role === 'admin' || user.role === 'super_admin' ? team.name : undefined}
-        />
-      ) : null}
       <div className="grid gap-3 sm:grid-cols-3">
         <ActionTile href="/leads?view=unassigned" label="Leads waiting to be assigned" icon={UserPlus} count={queue.total} tone="warning" />
         <ActionTile href="/follow-ups" label="Overdue follow-ups" icon={AlarmClock} count={overdue.length} tone="danger" />
@@ -137,7 +122,8 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
           {board.length === 0 ? <EmptyState title="No agents yet" description="Add agents in Settings → Users." /> : board.map((m) => <TeamMemberRow key={m.id} member={m} now={now} />)}
         </SectionCard>
         <SectionCard title={`Waiting for assignment (${queue.total})`} actions={<Button asChild variant="outline" size="touch"><Link href="/leads?view=unassigned">Open</Link></Button>}>
-          {queue.rows.length === 0 ? <EmptyState title="Queue is empty" /> : <div className="space-y-2">{queue.rows.slice(0, 5).map((l) => <LeadCard key={l.id} lead={l} href={`/leads/${l.id}`} />)}</div>}
+          <QueuePanel teams={queuePanels} />
+          {queue.rows.length === 0 ? null : <div className="mt-3 space-y-2">{queue.rows.slice(0, 5).map((l) => <LeadCard key={l.id} lead={l} href={`/leads/${l.id}`} />)}</div>}
         </SectionCard>
       </div>
       <KpiGrid items={kpis} />

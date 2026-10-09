@@ -25,11 +25,12 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | CountdownTimer (client) | countdown-timer.tsx | `deadline (ISO)` · hook `useNow()` | Live "Due in / Overdue" |
 | ConfirmDialog (client) | confirm-dialog.tsx | `trigger, title, description?, confirmLabel?, destructive?, onConfirm` | Confirm risky actions; `onConfirm` may be a Server Action |
 | ActionTile | action-tile.tsx | `href, label, icon, count?, tone?` | Big shortcut to waiting work ("5 leads to assign") — top of dashboards. `count 0` = calm |
+| RefreshButton (client) | refresh-button.tsx | `className?` | Re-loads the page's data (router.refresh). Lives in the top bar, so every page has it |
+| UsernameField (client) | username-field.tsx | `label?, name?` | Username input with live "Signs in as: talha.khan" preview (same cleaning as the server, src/lib/username.ts) |
 | SubmitButton (client) | submit-button.tsx | Button props + `pendingText?` | Submit button for plain server-action forms: spinner + disabled while saving |
 | ActionForm (client) | action-form.tsx | `action, onSuccess?, children` | Every form posting to a Server Action (`useActionState`, shows errors) |
 | TextField / TextAreaField / SelectField / CheckboxField | fields.tsx | `label, name, …input props` | Labelled ≥ 44 px form fields |
 | ServiceWorker / InstallPrompt (client) | pwa.tsx | — | SW registration (root layout) and the "Install app" banner (Android button, iPhone Share steps) |
-| NavigationProgressBar (client) | progress-bar.tsx | — | Top loading progress bar providing instant visual feedback on route changes |
 | AppShell (client) | app-shell.tsx | `role, userName, actions?, children` | Signed-in layout: sidebar (lg+), top bar + bottom nav (phones). Items from `src/domain/navigation.ts` |
 
 ## Layer 3 — CRM (`src/components/crm`)
@@ -47,13 +48,19 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | TeamMemberRow | team-member-row.tsx | `member: TeamMemberView, now: Date` |
 | MessageBubble | message-bubble.tsx | `message: MessageView` |
 | KpiGrid | kpi-grid.tsx | `items: KpiItem[]` — PDF KPI labels |
-| ContactActions (client) | contact-actions.tsx | `leadId, pendingAttemptId` — big WhatsApp / WA call / Call tiles, server-timed tap, outcome sheet + screenshot upload |
+| ContactActions (client) | contact-actions.tsx | `leadId, leadName, leadNo, attemptCount, pending, lastResult, stageLabel` — big WhatsApp / WA call / Call tiles; outcome sheet explains why it opened (back from WhatsApp / unsaved tap / second tap), try X of 3, last result, "what happens next", "I tapped by mistake" |
 | ChatPanel (client) | chat-panel.tsx | `leadId, messages` — WhatsApp thread + send box |
 | NotificationBell (client) | notification-bell.tsx | — polls `/api/me/poll` every 20 s |
 | QuickAddLead (client) | quick-add-lead.tsx | — manual lead sheet |
+| LeadDetailsDialog (client) | lead-details-dialog.tsx | `leadId, label?, compact?` — "Sheet details" pop-up: source, form answers and every extra Sheet column (loads on open) |
+| SheetSources / SheetColumnGuide | sheet-sources.tsx | `sources, statusOf, isAdmin, defaultDepartment` — Settings → Google Sheets cards + the column rules |
+| NextStepCard / LeadJourney | lead-journey.tsx | `next` / `steps` from `leadJourney()` (src/domain/lead-journey.ts) — "what to do now" + Accept → Try 1–3 → Close → Manager check |
+| LeadBulkActions / LeadSelectBox (client) | lead-bulk-actions.tsx | — / `leadId, label` — managers tick leads → reason → confirm → soft delete (`deleteLeadsAction`) |
+| ProofStorage | proof-storage.tsx | `stats, account, scopeLabel` — Settings → Proof storage: MB used, clear screenshots by date (preview → type CLEAR) |
+| MetaLeadsPanel | meta-leads-panel.tsx | `missing, webhookUrl, state, leadCount` — Settings → Meta lead forms (admins): connection status, Turn on live leads, form → department, Fetch leads from Meta |
+| QueuePanel | queue-panel.tsx | `teams` from `getQueuePanels()` — why leads wait + "Assign waiting leads now" |
+| AlertPrefsForm | alert-prefs-form.tsx | `prefs, employees` — Settings → My alerts |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |
-| AutoAssignToggle (client) | auto-assign-toggle.tsx | `teamId, initialEnabled, teamName?` — dashboard toggle for auto/manual lead dispatch |
-| PipelineBoard (client) | pipeline-board.tsx | `stages, leads` — drag horizontal scroll with grab cursor for desktop & mobile Kanban |
 
 View-model types: `src/domain/view-models.ts`. Demo data: `src/dev/fixtures.ts`.
 

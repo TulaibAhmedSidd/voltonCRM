@@ -1,6 +1,5 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/common/page-header'
 import { FilterBar, FilterChip } from '@/components/common/filter-bar'
@@ -8,14 +7,18 @@ import { SearchBox } from '@/components/common/search-box'
 import { DataTable, type Column } from '@/components/common/data-table'
 import { EmptyState } from '@/components/common/states'
 import { LeadCard } from '@/components/crm/lead-card'
+import { LeadDetailsDialog } from '@/components/crm/lead-details-dialog'
+import { LeadBulkActions, LeadSelectBox } from '@/components/crm/lead-bulk-actions'
 import { AssignmentBadge, DepartmentBadge, SourceBadge, StageBadge } from '@/components/crm/badges'
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
-import { SyncSheetButton } from '@/components/crm/sync-sheet-button'
+import { ActionForm } from '@/components/common/action-form'
+import { pullSheetAction } from '@/server/actions'
 import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
-import { formatPhone } from '@/lib/phone'
+import { formatPhone, maskPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
-import { DATE_FILTERS, LEAD_VIEWS, PAGE_SIZE, listLeads, type DateFilter, type LeadView } from '@/server/services/queries'
+import { LEAD_VIEWS, PAGE_SIZE, getQueuePanels, listLeads, type LeadView } from '@/server/services/queries'
+import { QueuePanel } from '@/components/crm/queue-panel'
 
 export const metadata = { title: 'Leads' }
 
@@ -30,29 +33,22 @@ const VIEW_LABEL: Record<LeadView, string> = {
   unreachable: 'Dead / junk',
 }
 
-const DATE_LABEL: Record<DateFilter, string> = {
-  all: 'All dates',
-  today: 'Today',
-  yesterday: 'Yesterday',
-  week: 'This week',
-  month: 'This month',
-}
-
 export default async function LeadsPage(props: PageProps<'/leads'>) {
   const user = await requireUser()
   const sp = await props.searchParams
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined)
   const view = (LEAD_VIEWS as readonly string[]).includes(one('view') ?? '') ? (one('view') as LeadView) : user.role === 'agent' ? 'mine' : 'all'
-  const date = (DATE_FILTERS as readonly string[]).includes(one('date') ?? '') ? (one('date') as DateFilter) : 'all'
   const page = Number(one('page') ?? 1)
-  const { rows, total, counts, dateCounts } = await listLeads(user, { view, date, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc' })
+  const { rows, total, counts } = await listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc' })
   const views = LEAD_VIEWS.filter((v) => !(v === 'mine' && user.role !== 'agent') && !(v === 'unassigned' && user.role === 'agent'))
   const href = (params: Record<string, string | number | undefined>) => {
     const q = new URLSearchParams()
-    for (const [k, v] of Object.entries({ view, date: date === 'all' ? undefined : date, q: one('q'), sort: one('sort'), dir: one('dir'), ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
+    for (const [k, v] of Object.entries({ view, q: one('q'), sort: one('sort'), dir: one('dir'), ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
     return `/leads?${q}`
   }
+  const canDelete = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin'
   const columns: Column<LeadSummary>[] = [
+    ...(canDelete ? [{ key: 'select', header: '', cell: (l: LeadSummary) => <LeadSelectBox leadId={l.id} label={`${l.name} ${l.leadNo}`} /> }] : []),
     {
       key: 'name',
       header: 'Customer',
@@ -60,7 +56,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         <Link href={`/leads/${l.id}`} className="font-medium underline-offset-4 hover:underline">
           {l.name}
           <span className="block text-xs text-muted-foreground">
-            {formatPhone(l.phone)} · {l.leadNo}
+            {l.maskPhone ? maskPhone(l.phone) : formatPhone(l.phone)} · {l.leadNo}
           </span>
         </Link>
       ),
@@ -72,16 +68,25 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     { key: 'attempts', header: 'Attempts', sortable: true, align: 'end', cell: (l) => l.attemptCount },
     { key: 'followup', header: 'Next follow-up', sortable: true, cell: (l) => (l.nextFollowUpAt ? formatPktDateTime(new Date(l.nextFollowUpAt)) : '—') },
     { key: 'received', header: 'Received', sortable: true, cell: (l) => formatPktDateTime(new Date(l.receivedAt)) },
+    { key: 'details', header: 'Details', cell: (l) => <LeadDetailsDialog leadId={l.id} compact /> },
   ]
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const queuePanels = view === 'unassigned' && user.role !== 'agent' ? await getQueuePanels(user) : []
   return (
     <>
       <PageHeader
         title="Leads"
         description={`${total} in this view`}
         actions={
-          <div className="flex items-center gap-2">
-            {user.role !== 'agent' ? <SyncSheetButton /> : null}
+          <div className="flex flex-wrap items-start gap-2">
+            {user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin' ? (
+              <ActionForm action={pullSheetAction} className="space-y-2">
+                <input type="hidden" name="mode" value="live" />
+                <Button type="submit" variant="outline" size="touch">
+                  Sync Google Sheet now
+                </Button>
+              </ActionForm>
+            ) : null}
             <QuickAddLead defaultDepartment={user.departmentCode} />
           </div>
         }
@@ -89,33 +94,26 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
       <Suspense>
         <SearchBox />
       </Suspense>
+      {queuePanels.length ? <QueuePanel teams={queuePanels} /> : null}
       <FilterBar>
         {views.map((v) => (
           <FilterChip key={v} label={VIEW_LABEL[v]} href={href({ view: v, page: undefined })} active={v === view} count={counts[v]} />
         ))}
       </FilterBar>
-      <div className="flex items-center gap-1.5 pt-1 text-xs text-muted-foreground">
-        <Calendar className="size-3.5 shrink-0" />
-        <span className="font-medium">Date received:</span>
-      </div>
-      <FilterBar className="pt-0">
-        {DATE_FILTERS.map((df) => (
-          <FilterChip
-            key={df}
-            label={DATE_LABEL[df]}
-            href={href({ date: df === 'all' ? undefined : df, page: undefined })}
-            active={df === date}
-            count={dateCounts[df]}
-          />
-        ))}
-      </FilterBar>
+      {canDelete && rows.length ? <LeadBulkActions /> : null}
       {rows.length === 0 ? (
         <EmptyState title="No leads here" description="New leads from the Google Sheet and WhatsApp appear automatically." />
       ) : (
         <>
           <div className="space-y-3 md:hidden">
             {rows.map((l) => (
-              <LeadCard key={l.id} lead={l} href={`/leads/${l.id}`} showAgent={user.role !== 'agent'} />
+              <div key={l.id} className="flex items-start gap-2">
+                {canDelete ? <LeadSelectBox leadId={l.id} label={`${l.name} ${l.leadNo}`} /> : null}
+                <div className="min-w-0 flex-1">
+                  <LeadCard lead={l} href={`/leads/${l.id}`} showAgent={user.role !== 'agent'} />
+                </div>
+                <LeadDetailsDialog leadId={l.id} compact />
+              </div>
             ))}
           </div>
           <DataTable

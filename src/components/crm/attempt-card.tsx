@@ -46,6 +46,7 @@ export function AttemptCard({ attempt }: { attempt: AttemptView }) {
         {awayMs !== undefined ? <li className="ms-1 font-medium text-foreground">({en.attempt.away(formatDuration(awayMs))})</li> : null}
       </ol>
 
+      {attempt.cancelled ? <StatusBadge label="Cancelled — tapped by mistake (not a try)" tone="neutral" size="sm" /> : null}
       {attempt.result ? (
         <div className="flex flex-wrap gap-1.5">
           <CallResultBadge result={attempt.result} size="sm" />
@@ -61,6 +62,8 @@ export function AttemptCard({ attempt }: { attempt: AttemptView }) {
             <ImageIcon className="size-4" aria-hidden />
             {en.attempt.screenshot}
           </a>
+        ) : attempt.screenshotCleared ? (
+          <span className="text-muted-foreground">Screenshot cleared (storage)</span>
         ) : (
           <span className="text-muted-foreground">{en.attempt.noScreenshot}</span>
         )}
