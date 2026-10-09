@@ -14,16 +14,19 @@ import { execSync } from 'node:child_process'
 const TARGET_NAME = 'TulaibAhmedSidd'
 const TARGET_EMAIL = 'ahsidtullu@gmail.com'
 
+const defaultShell = process.platform === 'win32' ? 'powershell.exe' : '/bin/sh'
+
 function run(cmd, env = {}) {
   console.log(`> ${cmd}`)
   return execSync(cmd, {
     stdio: 'inherit',
+    shell: defaultShell,
     env: { ...process.env, ...env },
   })
 }
 
 function runOut(cmd) {
-  return execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim()
+  return execSync(cmd, { encoding: 'utf8', shell: defaultShell, stdio: ['pipe', 'pipe', 'ignore'] }).trim()
 }
 
 async function main() {
