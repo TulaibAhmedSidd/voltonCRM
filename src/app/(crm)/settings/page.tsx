@@ -6,11 +6,13 @@ import { SheetSources } from '@/components/crm/sheet-sources'
 import { AlertPrefsForm } from '@/components/crm/alert-prefs-form'
 import { ProofStorage } from '@/components/crm/proof-storage'
 import { MetaLeadsPanel } from '@/components/crm/meta-leads-panel'
+import { WhatsAppNumbersPanel } from '@/components/crm/whatsapp-numbers-panel'
+import { embeddedSignupConfig } from '@/server/services/whatsapp-onboarding'
 import { metaMissing } from '@/server/services/meta-leads'
 import { headers } from 'next/headers'
 import { proofStorageStats } from '@/server/services/storage'
 import { cloudinaryUsage } from '@/server/services/cloudinary'
-import { Lead, User } from '@/server/db/models'
+import { Lead, User, WhatsAppNumber } from '@/server/db/models'
 import { prefsOf } from '@/server/services/watch'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionCard } from '@/components/common/section-card'
@@ -45,6 +47,7 @@ export default async function SettingsPage() {
   const [me, proofStats, cloudAccount] = await Promise.all([User.findById(user.id).select('role alertPrefs').lean(), proofStorageStats(user), cloudinaryUsage()])
   const myAlerts = prefsOf(me ?? { role: user.role })
   const [metaState, metaLeadCount] = admin ? await Promise.all([getSetting('meta_leads'), Lead.countDocuments({ 'source.channel': 'meta_webhook' })]) : [null, 0]
+  const waNumbers = admin ? await WhatsAppNumber.find().select('+tokenEnc').sort({ createdAt: 1 }).lean() : []
   const host = (await headers()).get('host') ?? 'your-app.vercel.app'
   const webhookUrl = `${host.startsWith('localhost') ? 'http' : 'https'}://${host}/api/webhooks/meta-leads`
   const employees = users.filter((u) => (u.role === 'agent' || u.role === 'field_agent') && u.isActive).map((u) => ({ id: u.id, name: u.name, role: u.role }))
@@ -95,6 +98,30 @@ export default async function SettingsPage() {
           <SheetSources sources={sheets} statusOf={statusOf} isAdmin={admin} defaultDepartment={user.departmentCode} />
         </SectionCard>
       </section>
+
+      {admin ? (
+        <section id="whatsapp-numbers" className="scroll-mt-20">
+          <SectionCard title="WhatsApp numbers" description="Connect the company's WhatsApp numbers. Numbers already on the WhatsApp Business app keep working on the phone, and every chat also appears in the CRM.">
+            <WhatsAppNumbersPanel
+              signup={embeddedSignupConfig()}
+              agents={employees.map((e) => ({ id: e.id, name: e.name }))}
+              numbers={waNumbers.map((n) => ({
+                id: String(n._id),
+                number: n.number,
+                displayName: n.displayName,
+                coexistence: !!n.coexistence,
+                connectedViaSignup: !!n.tokenEnc,
+                status: n.status,
+                agentId: n.agentId ? String(n.agentId) : null,
+                lastEchoAt: n.lastEchoAt?.toISOString() ?? null,
+                historyMessages: n.historyMessages ?? 0,
+                historySyncRequestedAt: n.historySyncRequestedAt?.toISOString() ?? null,
+                lastSyncError: n.lastSyncError ?? null,
+              }))}
+            />
+          </SectionCard>
+        </section>
+      ) : null}
 
       {admin && metaState ? (
         <section id="meta-leads" className="scroll-mt-20">

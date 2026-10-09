@@ -13,7 +13,7 @@ import { getServerEnv } from '@/lib/env'
 import { normalizePhone } from '@/lib/phone'
 import { normalizeUsername, usernameProblem } from '@/lib/username'
 import { connectDb } from '@/server/db/connection'
-import { AuditLog, Contact, Lead, Notification, Team, User, Visit } from '@/server/db/models'
+import { AuditLog, Contact, Lead, Notification, Team, User, Visit, WhatsAppNumber } from '@/server/db/models'
 import { formatPktDate, formatPktDateTime } from '@/lib/dates-pkt'
 import { clearProofs, formatBytes, PROOF_RANGES, type ProofRange } from '@/server/services/storage'
 import { en } from '@/i18n/en'
@@ -31,6 +31,7 @@ import { setSetting } from '@/server/services/settings'
 import { assignVisit, createVisit, updateVisit } from '@/server/services/visits'
 import { sendWhatsAppText } from '@/server/services/whatsapp'
 import { saveMetaFormDepartments, subscribeMetaPage, syncMetaLeads } from '@/server/services/meta-leads'
+import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
 import { isHexColor, THEME_PRESETS } from '@/styles/runtime-theme'
 
 const str = (fd: FormData, key: string) => {
@@ -754,6 +755,48 @@ export async function syncMetaLeadsAction(_prev: ActionState, fd: FormData): Pro
     if (r.alreadyInCrm) parts.push(`${r.alreadyInCrm} already in the CRM (skipped)`)
     if (r.failed) parts.push(`${r.failed} failed: ${r.errors.join('; ')}`)
     return { ok: !r.failed, message: parts.join(' · ') }
+  })
+}
+
+// ── WhatsApp numbers (Coexistence) ──
+
+const signupInput = z.object({
+  code: z.string().min(10).max(4000),
+  phoneNumberId: z.string().regex(/^\d{5,25}$/).optional(),
+  wabaId: z.string().regex(/^\d{5,25}$/).optional(),
+  agentId: z.string().regex(/^[a-f0-9]{24}$/i).nullable().optional(),
+  coexistence: z.boolean(),
+})
+
+/** Called by the "Connect WhatsApp number" button after Meta's sign-up window finishes. */
+export async function connectWhatsAppNumberAction(input: unknown): Promise<ActionState> {
+  const actor = await requireRole('admin')
+  return attempt(async () => {
+    const parsed = signupInput.safeParse(input)
+    if (!parsed.success) return { ok: false, message: 'The Meta sign-up did not finish — press Connect again and complete every step.' }
+    const r = await completeEmbeddedSignup(parsed.data, actor.id)
+    refresh()
+    const parts = [`Connected ${r.displayName} (${r.number}).`]
+    if (r.coexistence) parts.push('Keep using the WhatsApp Business app on the phone — every chat now also appears in the CRM. Old chats arrive over the next few hours.')
+    if (r.warnings.length) parts.push(`Note: ${r.warnings.join(' · ')}`)
+    return { ok: true, message: parts.join(' ') }
+  })
+}
+
+/** Whose phone a company WhatsApp number is on: messages sent from the phone count as that agent's proof. */
+export async function setWhatsAppNumberOwnerAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin')
+  return attempt(async () => {
+    const numberId = str(fd, 'numberId')
+    const agentId = str(fd, 'agentId')
+    if (!numberId || !isObjectId(numberId)) return { ok: false, message: 'Number not found' }
+    const agent = agentId ? await User.findOne({ _id: oid(agentId), role: { $in: ['agent', 'field_agent', 'manager'] }, deletedAt: null }).select('_id departmentId name').lean() : null
+    if (agentId && !agent) return { ok: false, message: 'Employee not found' }
+    const r = await WhatsAppNumber.updateOne({ _id: oid(numberId) }, { $set: { ownerType: agent ? 'agent' : 'department', agentId: agent?._id ?? null, departmentId: agent?.departmentId ?? null } })
+    if (!r.matchedCount) return { ok: false, message: 'Number not found' }
+    await AuditLog.create({ entity: 'whatsapp_number', entityId: oid(numberId), action: 'update', after: { agentId: agentId ?? null }, actorId: oid(actor.id) })
+    refresh()
+    return { ok: true, message: agent ? `Saved — messages sent from this phone count for ${agent.name}.` : 'Saved — this is a shared company number.' }
   })
 }
 

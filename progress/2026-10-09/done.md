@@ -102,3 +102,25 @@
 - The notification bell polls only while the screen is visible, every 30 s instead of 20 s. It checks straight away when the screen is opened again.
 - Checked live Meta: the Page is subscribed to the app for `leadgen` ("Turn on live leads" worked) and Vercel has the verify token. Still to do: the test WhatsApp account is not subscribed to the app.
 - Tests: lead-filters unit tests; filter scope test in security.test.ts.
+
+## Later — WhatsApp test account fixed + Coexistence (connect existing WhatsApp Business app numbers)
+- **Found:** the app had no webhook address saved in Meta (neither WhatsApp nor Page), and the test WhatsApp account was not subscribed to the app. The user's IDs and keys were all correct.
+- **Fixed in Meta (via API, with the user's OK):**
+  - WhatsApp webhook → `/api/webhooks/whatsapp`, fields `messages`, `smb_message_echoes`, `history`, `smb_app_state_sync`
+  - Page webhook → `/api/webhooks/meta-leads`, field `leadgen`
+  - test WhatsApp account subscribed to Volton CRM
+  - Meta confirmed both callback URLs.
+- **Settings → WhatsApp numbers** (admins):
+  - list of numbers; whose phone each is on (phone-sent messages count for that employee)
+  - **Connect WhatsApp number** = Meta Embedded Signup, either Coexistence (`featureType: whatsapp_business_app_onboarding`) or a new number
+- **Server side of Connect:**
+  - one-time code → business token, stored **encrypted** (AES-256-GCM, key from AUTH_SECRET; hidden from queries by default)
+  - subscribes the WhatsApp account to the app
+  - saves the number, then asks Meta for contacts + chat history (only allowed within 24 h of onboarding)
+- **Webhooks:**
+  - `history` saves old chats on the customer (creating the contact if needed, **no lead**)
+  - `smb_app_state_sync` fills in contact names
+  - a declined history share is shown on the number
+- Replies from the CRM go out from the number the customer wrote to (that number's own token).
+- New env: `META_APP_ID`, `META_ES_CONFIG_ID`. Guide: `docs/whatsapp-coexistence.md`.
+- Tests: tests/db/coexistence.test.ts (secret box, signup happy path + refused code, history import / replay / contact names / declined history, a later message opens a lead).

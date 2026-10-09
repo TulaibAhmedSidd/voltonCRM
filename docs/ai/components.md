@@ -59,6 +59,8 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | ProofStorage | proof-storage.tsx | `stats, account, scopeLabel` — Settings → Proof storage: MB used, clear screenshots by date (preview → type CLEAR) |
 | MetaLeadsPanel | meta-leads-panel.tsx | `missing, webhookUrl, state, leadCount` — Settings → Meta lead forms (admins): connection status, Turn on live leads, form → department, Fetch leads from Meta |
 | LeadFilterPanel | lead-filter-panel.tsx | `filters, keep, href, agents, forms, showAgent, showDepartment` — Leads page: source chips + "Show more filters" panel (every column, day / period / date range), removable filter chips |
+| WhatsAppNumbersPanel | whatsapp-numbers-panel.tsx | `numbers, agents, signup` — Settings → WhatsApp numbers (admins): connected numbers, whose phone, history status |
+| ConnectWhatsAppButton | connect-whatsapp-button.tsx | `appId, configId, agents` — client: Meta Embedded Signup (Coexistence or new number) → connectWhatsAppNumberAction |
 | QueuePanel | queue-panel.tsx | `teams` from `getQueuePanels()` — why leads wait + "Assign waiting leads now" |
 | AlertPrefsForm | alert-prefs-form.tsx | `prefs, employees` — Settings → My alerts |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |

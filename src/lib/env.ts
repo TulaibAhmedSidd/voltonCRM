@@ -18,6 +18,8 @@ const serverEnvSchema = z.object({
   META_PAGE_ACCESS_TOKEN: z.string().optional(),
   META_APP_SECRET: z.string().optional(),
   META_VERIFY_TOKEN: z.string().optional(),
+  META_APP_ID: z.string().optional(),
+  META_ES_CONFIG_ID: z.string().optional(),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>

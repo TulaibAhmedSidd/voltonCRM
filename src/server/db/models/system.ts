@@ -154,6 +154,15 @@ const whatsappNumberSchema = new Schema(
     status: { type: String, enum: WHATSAPP_NUMBER_STATUSES, required: true },
     connectedAt: { type: Date, default: null },
     lastEchoAt: { type: Date, default: null },
+    /** WhatsApp Business Account that owns the number */
+    wabaId: { type: String, default: null },
+    /** Connected with Coexistence: the number stays in the WhatsApp Business app on the phone. */
+    coexistence: { type: Boolean, default: false },
+    /** Business token from Embedded Signup, encrypted (secret-box). Never sent to the browser. */
+    tokenEnc: { type: String, default: null, select: false },
+    historySyncRequestedAt: { type: Date, default: null },
+    historyMessages: { type: Number, default: 0 },
+    lastSyncError: { type: String, default: null },
   },
   { timestamps: true },
 )

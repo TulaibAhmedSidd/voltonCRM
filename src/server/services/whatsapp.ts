@@ -10,6 +10,7 @@ import { Contact, ContactAttempt, IngestEvent, Lead, Message, WhatsAppNumber } f
 import type { SessionUser } from '@/server/auth/session'
 import { isDuplicateKey, logActivity, notify, oid, UserError } from '@/server/services/common'
 import { ingestLead } from '@/server/services/ingest'
+import { senderFor } from '@/server/services/whatsapp-onboarding'
 
 const GRAPH = 'https://graph.facebook.com/v23.0'
 
@@ -40,6 +41,10 @@ interface WaValue {
   messages?: WaMessage[]
   message_echoes?: WaMessage[]
   statuses?: { id: string; status: string; timestamp: string; errors?: { code: number }[] }[]
+  /** Coexistence: up to 6 months of past chats from the WhatsApp Business app (field "history"). */
+  history?: { metadata?: { phase?: number; progress?: number }; threads?: { id: string; messages?: (WaMessage & { history_context?: { status?: string } })[] }[]; errors?: { code?: number; message?: string }[] }[]
+  /** Coexistence: the phone's contact list (field "smb_app_state_sync"). */
+  state_sync?: { type?: string; action?: string; contact?: { full_name?: string; first_name?: string; phone_number?: string } }[]
 }
 
 const textOf = (m: WaMessage) => m.text?.body ?? m.image?.caption ?? m.document?.caption ?? m.document?.filename ?? m.button?.text ?? m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? `[${m.type}]`
@@ -120,6 +125,53 @@ export async function processWebhook(payload: { entry?: { changes?: { field: str
         }
       }
 
+      // Coexistence: contact names from the phone fill in contacts that only have a number as name.
+      for (const s of value.state_sync ?? []) {
+        if (s.type !== 'contact' || s.action === 'remove') continue
+        const p = normalizePhone(s.contact?.phone_number ? `+${s.contact.phone_number.replace(/\D/g, '')}` : null)
+        const name = (s.contact?.full_name ?? s.contact?.first_name ?? '').trim().slice(0, 120)
+        if (p && name) await Contact.updateOne({ phones: p, name: p }, { $set: { name } })
+      }
+
+      // Coexistence: past chats. Saved on the customer (a contact is created if needed) but NO lead is opened —
+      // old customers become a lead only when they message again.
+      let imported = 0
+      for (const chunk of value.history ?? []) {
+        if (chunk.errors?.length) {
+          number.lastSyncError = `Chat history not shared: ${chunk.errors[0].message ?? chunk.errors[0].code}`
+          continue
+        }
+        for (const thread of chunk.threads ?? []) {
+          const customer = normalizePhone(`+${thread.id}`)
+          if (!customer || !thread.messages?.length) continue
+          let contact = await Contact.findOne({ phones: customer })
+          if (!contact) {
+            try {
+              contact = await Contact.create({ name: customer, phones: [customer], whatsappE164: customer })
+            } catch (error) {
+              if (!isDuplicateKey(error)) throw error
+              contact = await Contact.findOne({ phones: customer })
+            }
+          }
+          if (!contact) continue
+          const lead = await Lead.findOne({ contactId: contact._id, deletedAt: null }).sort({ receivedAt: -1 }).select('_id')
+          for (const m of thread.messages) {
+            const out = normalizePhone(`+${m.from ?? ''}`) !== customer
+            const st = (m.history_context?.status ?? '').toLowerCase()
+            try {
+              await Message.create({ waMessageId: m.id, contactId: contact._id, leadId: lead?._id ?? null, numberId: number._id, direction: out ? 'out' : 'in', type: typeOf(m.type), text: textOf(m), sentFrom: out ? 'app' : 'customer', sentByUserId: out ? (number.agentId ?? null) : null, status: out ? ((['sent', 'delivered', 'read', 'failed'] as const).find((x) => x === st) ?? (st === 'played' ? 'read' : 'sent')) : 'received', at: new Date(Number(m.timestamp) * 1000) })
+              imported++
+            } catch (error) {
+              if (!isDuplicateKey(error)) throw error
+            }
+          }
+        }
+      }
+      if (imported || value.history?.length) {
+        number.historyMessages = (number.historyMessages ?? 0) + imported
+        await number.save()
+      }
+
       for (const s of value.statuses ?? []) {
         const map: Record<string, MessageStatus> = { sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed' }
         if (map[s.status]) await Message.updateOne({ waMessageId: s.id }, { status: map[s.status], statusAt: new Date(Number(s.timestamp) * 1000), errorCode: s.errors?.[0]?.code ? String(s.errors[0].code) : null })
@@ -141,16 +193,17 @@ async function verifyRecentAttempt(leadId: string, agentId: string | null): Prom
 /** Send a text from the CRM chat panel (Cloud API). Within 24 h of the customer's last message free-form text is allowed. */
 export async function sendWhatsAppText(leadId: string, text: string, user: SessionUser): Promise<void> {
   await connectDb()
-  const token = process.env.WHATSAPP_TOKEN
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
-  if (!token || !phoneNumberId) throw new UserError('WhatsApp is not connected yet (WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID missing).')
   const lead = await loadLeadFor(user, leadId, 'work')
   const body0 = text.trim()
   if (!body0 || body0.length > 1000) throw new UserError('Message must be 1–1000 characters')
   if ((await hit(`wa_send:${user.id}`, 30, 60_000)).blocked) throw new UserError('Too many messages — wait a minute')
   // Meta rule: free text only within 24 h of the customer's last message (otherwise an approved template is needed).
-  const lastIn = await Message.findOne({ contactId: lead.contactId, direction: 'in' }).sort({ at: -1 }).select('at').lean()
+  const lastIn = await Message.findOne({ contactId: lead.contactId, direction: 'in' }).sort({ at: -1 }).select('at numberId').lean()
   if (!lastIn || Date.now() - lastIn.at.getTime() > 24 * 3_600_000) throw new UserError('The customer has not messaged in the last 24 hours — use the WhatsApp button to chat from your phone')
+  // Reply from the same company number the customer wrote to.
+  const sender = await senderFor(lastIn.numberId)
+  if (!sender) throw new UserError('WhatsApp is not connected yet (WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID missing).')
+  const { token, phoneNumberId } = sender
   const contact = await Contact.findById(lead.contactId).lean()
   const to = (contact?.whatsappE164 ?? contact?.phones[0] ?? '').replace(/^\+/, '')
   const res = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
