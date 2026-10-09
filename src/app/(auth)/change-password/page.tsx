@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
-import { TextField } from '@/components/common/fields'
+import { PasswordField } from '@/components/common/password-field'
 import { requireUser } from '@/server/auth/session'
 import { changePasswordAction, logoutAction } from '@/server/actions'
 
@@ -19,9 +19,9 @@ export default async function ChangePasswordPage() {
         </p>
       </div>
       <ActionForm action={changePasswordAction}>
-        <TextField label={user.mustChangePassword ? 'Password you were given' : 'Current password'} name="current" type="password" autoComplete="current-password" required />
-        <TextField label="New password" name="password" type="password" autoComplete="new-password" minLength={8} required />
-        <TextField label="New password again" name="confirm" type="password" autoComplete="new-password" minLength={8} required />
+        <PasswordField label={user.mustChangePassword ? 'Password you were given' : 'Current password'} name="current" autoComplete="current-password" required />
+        <PasswordField label="New password" name="password" autoComplete="new-password" minLength={8} required />
+        <PasswordField label="New password again" name="confirm" autoComplete="new-password" minLength={8} required />
         <Button type="submit" size="xl" className="w-full">
           Save new password
         </Button>

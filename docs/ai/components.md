@@ -63,6 +63,9 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | ConnectWhatsAppButton | connect-whatsapp-button.tsx | `appId, configId, agents` — client: Meta Embedded Signup (Coexistence or new number) → connectWhatsAppNumberAction |
 | ExportLeads | export-leads.tsx | `filters` — Leads page (managers/admins): "Download Excel report" — period (today / week / month…) or date range → /api/exports/leads |
 | QuotationBuilder | quotation-builder.tsx | `leadId, initial, quotations, canCreate, customer` — client: lead page → Quotation tab: every field (system, panels, inverter, battery, structure, wiring, protection, net metering, transport, labour, extras, discount, warranty, terms), live total + words, Generate PDF, Open / Download / Share |
+| LeadSourcesPanel | lead-sources-panel.tsx | `sources` — Leads page (managers/admins): each lead source (Meta forms, WhatsApp, Google Sheet, staff) with auto-sync status, last activity, problems; includes AutoRefresh |
+| AutoRefresh | common/auto-refresh.tsx | `everyMs?, busySelector?` — client: router.refresh() every minute while visible (skips while typing / leads ticked) |
+| PasswordField / PasswordInput | common/password-field.tsx | like TextField; eye button to show / hide; `defaultVisible` for temporary passwords |
 | QueuePanel | queue-panel.tsx | `teams` from `getQueuePanels()` — why leads wait + "Assign waiting leads now" |
 | AlertPrefsForm | alert-prefs-form.tsx | `prefs, employees` — Settings → My alerts |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |

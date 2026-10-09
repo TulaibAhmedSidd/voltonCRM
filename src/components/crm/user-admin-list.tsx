@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { PasswordInput } from '@/components/common/password-field'
 import { ActionForm } from '@/components/common/action-form'
 import { StatusBadge } from '@/components/common/status-badge'
 import type { Department, Role } from '@/domain/constants'
@@ -55,7 +56,9 @@ export function UserAdminList({ users, viewer }: { users: AdminListUser[]; viewe
                   <ActionForm action={resetPasswordAction}>
                     <input type="hidden" name="userId" value={u.id} />
                     <div className="flex gap-2">
-                      <input name="password" type="text" minLength={8} required aria-label="Temporary password" placeholder="Temporary password" autoComplete="off" className="h-11 min-w-0 flex-1 rounded-lg border border-input bg-card px-3" />
+                      <div className="min-w-0 flex-1">
+                        <PasswordInput defaultVisible name="password" minLength={8} required aria-label="Temporary password" placeholder="Temporary password" autoComplete="off" />
+                      </div>
                       <Button type="submit" variant="outline" size="touch">
                         Set
                       </Button>

@@ -3,6 +3,7 @@ import { connection } from 'next/server'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
 import { TextField } from '@/components/common/fields'
+import { PasswordField } from '@/components/common/password-field'
 import { UsernameField } from '@/components/common/username-field'
 import { setupAction } from '@/server/actions'
 import { connectDb } from '@/server/db/connection'
@@ -22,11 +23,11 @@ export default async function SetupPage() {
         <p className="text-sm text-muted-foreground">One time only. You need the master key from the server settings.</p>
       </div>
       <ActionForm action={setupAction}>
-        <TextField label="Master key" name="masterKey" type="password" required />
+        <PasswordField label="Master key" name="masterKey" required />
         <TextField label="Your name" name="name" required />
         <TextField label="Email" name="email" type="email" required />
         <UsernameField label="Username" />
-        <TextField label="Password (8+ characters)" name="password" type="password" minLength={8} required />
+        <PasswordField label="Password (8+ characters)" name="password" minLength={8} required />
         <Button type="submit" size="touch" className="w-full">
           Create admin
         </Button>

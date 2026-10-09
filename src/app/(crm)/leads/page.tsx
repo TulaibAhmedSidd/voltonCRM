@@ -21,6 +21,9 @@ import { LEAD_VIEWS, PAGE_SIZE, getQueuePanels, leadFilterOptions, listLeads, ty
 import { activeFilterCount, parseLeadFilters } from '@/domain/lead-filters'
 import { LeadFilterPanel } from '@/components/crm/lead-filter-panel'
 import { ExportLeads } from '@/components/crm/export-leads'
+import { LeadSourcesPanel } from '@/components/crm/lead-sources-panel'
+import { AutoRefresh } from '@/components/common/auto-refresh'
+import { leadSourcesStatus } from '@/server/services/lead-sources'
 import { QueuePanel } from '@/components/crm/queue-panel'
 
 export const metadata = { title: 'Leads' }
@@ -47,6 +50,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc', filters }),
     leadFilterOptions(user),
   ])
+  const sources = user.role === 'agent' ? [] : await leadSourcesStatus(user)
   const views = LEAD_VIEWS.filter((v) => !(v === 'mine' && user.role !== 'agent') && !(v === 'unassigned' && user.role === 'agent'))
   const href = (params: Record<string, string | number | undefined>) => {
     const q = new URLSearchParams()
@@ -98,6 +102,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           </div>
         }
       />
+      {sources.length ? <LeadSourcesPanel sources={sources} /> : <AutoRefresh />}
       <Suspense>
         <SearchBox />
       </Suspense>
@@ -117,7 +122,6 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         showDepartment={user.role === 'admin' || user.role === 'super_admin'}
       />
       {canDelete ? <ExportLeads filters={filters} /> : null}
-      {canDelete && rows.length ? <LeadBulkActions /> : null}
       {rows.length === 0 ? (
         activeFilterCount(filters) ? (
           <EmptyState title="No leads match these filters" description="Remove a filter above or press Clear all." />
@@ -148,6 +152,8 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           />
         </>
       )}
+      {/* Delete sits under the list: tick leads above, then delete here. */}
+      {canDelete && rows.length ? <LeadBulkActions /> : null}
       {pages > 1 ? (
         <nav className="flex items-center justify-between" aria-label="Pages">
           {page > 1 ? (

@@ -94,6 +94,16 @@ describe('Excel report', () => {
   })
 })
 
+describe('lead sources panel', () => {
+  it('lists each source with how it syncs; Meta / WhatsApp show Not connected without keys', async () => {
+    const { leadSourcesStatus } = await import('@/server/services/lead-sources')
+    const list = await leadSourcesStatus(mgr)
+    expect(list.map((s) => s.key)).toEqual(['meta', 'whatsapp', 'manual'])
+    expect(list.find((s) => s.key === 'meta')).toMatchObject({ health: 'off' })
+    expect(list.find((s) => s.key === 'manual')?.how).toMatch(/Add lead/)
+  })
+})
+
 describe('GET /api/exports/leads', () => {
   const req = (q: string) => new NextRequest(new URL(`/api/exports/leads?${q}`, 'https://crm.test'))
   it('needs a manager / admin login', async () => {

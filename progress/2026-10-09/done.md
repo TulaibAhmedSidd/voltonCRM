@@ -167,3 +167,14 @@
 - PDF colours live in `src/styles/document-colors.ts` (colour lint rule).
 - `docs/guide/Volton-CRM-Meta-WhatsApp-Guide.docx`: Word guide covering how Meta forms / WhatsApp / Coexistence work, what is done, all keys, the remaining steps, daily use and fixes.
 - Tests: tests/unit/quotation.test.ts (maths, words, schema, PDF structure / xref / logo), tests/unit/quotation-builder.test.tsx (form, live total, generate), tests/db/quotations.test.ts (numbering, stage, access, PDF route).
+
+## Later — Leads page sync info, auto-refresh, delete under the list, password eye
+- **Leads page → "Where leads come from"** (managers / admins), one row per source with "Auto-sync on" / "Stopped" / "Not connected", how it syncs, the last activity time and any problem:
+  - Facebook / Instagram forms: automatic within seconds, plus a 15-minute backup check
+  - WhatsApp: automatic, a new chat becomes a lead instantly
+  - Google Sheet(s): automatic every minute, or "Sync Google Sheet now"; a stopped tab shows its problem
+  - Added by staff: Manual
+- **The list refreshes by itself** every minute while the page is open, and straight away when you come back to it. It skips a round while someone is typing or has leads ticked for delete. Agents get the auto-refresh too.
+- **Delete (bulk) moved under the table.** Tick leads in the list, then delete at the bottom.
+- **Every password box has an eye button** to show / hide: login, first setup, change password, and the temporary password when adding a user or resetting one (temporary passwords start visible).
+- Tests: tests/unit/password-refresh.test.tsx; lead sources test in tests/db/reports.test.ts. Checked in the browser on a local copy: eye toggles, panel shows, delete bar is under the table, and the list updated itself.

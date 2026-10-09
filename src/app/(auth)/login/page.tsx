@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
 import { TextField } from '@/components/common/fields'
+import { PasswordField } from '@/components/common/password-field'
 import { getSessionUser } from '@/server/auth/session'
 import { safeNext } from '@/server/auth/guards'
 import { loginAction } from '@/server/actions'
@@ -23,7 +24,7 @@ export default async function LoginPage(props: PageProps<'/login'>) {
       <ActionForm action={loginAction}>
         <input type="hidden" name="next" value={target} />
         <TextField label="Username or email" name="login" autoComplete="username" required autoCapitalize="none" />
-        <TextField label="Password" name="password" type="password" autoComplete="current-password" required />
+        <PasswordField label="Password" name="password" autoComplete="current-password" required />
         <Button type="submit" size="xl" className="w-full">
           Sign in
         </Button>

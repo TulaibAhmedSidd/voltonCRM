@@ -63,7 +63,7 @@ export function LeadBulkActions() {
           />
           Select all on this page
         </label>
-        <span className="text-sm text-muted-foreground">{count ? `${count} selected` : 'Tick leads to delete them'}</span>
+        <span className="text-sm text-muted-foreground">{count ? `${count} selected` : 'Tick leads in the list above to delete them'}</span>
       </div>
       {count ? (
         <div className="flex flex-wrap items-end gap-2">

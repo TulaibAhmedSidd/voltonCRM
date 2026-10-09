@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
 import { SelectField, TextField } from '@/components/common/fields'
 import { UsernameField } from '@/components/common/username-field'
+import { PasswordField } from '@/components/common/password-field'
 import { SheetSources } from '@/components/crm/sheet-sources'
 import { AlertPrefsForm } from '@/components/crm/alert-prefs-form'
 import { ProofStorage } from '@/components/crm/proof-storage'
@@ -68,7 +69,7 @@ export default async function SettingsPage() {
             <TextField label="Full name" name="name" required />
             <div className="grid gap-3 sm:grid-cols-2">
               <UsernameField />
-              <TextField label="Temporary password" name="password" type="text" minLength={8} required autoComplete="off" hint="At least 8 characters, not 12345678. They choose their own at first sign-in." />
+              <PasswordField defaultVisible label="Temporary password" name="password" minLength={8} required autoComplete="off" hint="At least 8 characters, not 12345678. They choose their own at first sign-in." />
               <TextField label="Phone (optional)" name="phone" inputMode="tel" placeholder="0300 1234567" hint="03XX XXXXXXX or +92…" />
               <TextField label="Email (optional)" name="email" type="email" hint="Leave empty if they have none" />
               <SelectField label="Role" name="role" defaultValue="agent" options={roleOptions} />
