@@ -32,6 +32,7 @@ import { assignVisit, createVisit, updateVisit } from '@/server/services/visits'
 import { sendWhatsAppText } from '@/server/services/whatsapp'
 import { saveMetaFormDepartments, subscribeMetaPage, syncMetaLeads } from '@/server/services/meta-leads'
 import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
+import { createQuotation } from '@/server/services/quotations'
 import { isHexColor, THEME_PRESETS } from '@/styles/runtime-theme'
 
 const str = (fd: FormData, key: string) => {
@@ -756,6 +757,25 @@ export async function syncMetaLeadsAction(_prev: ActionState, fd: FormData): Pro
     if (r.failed) parts.push(`${r.failed} failed: ${r.errors.join('; ')}`)
     return { ok: !r.failed, message: parts.join(' · ') }
   })
+}
+
+// ── Quotations ──
+
+export type QuotationState = (ActionState & { quotationId?: string; quotationNo?: string }) | null
+
+/** Lead page → Quotation: save a numbered quotation (snapshot) and return its id for the PDF link. */
+export async function createQuotationAction(input: { leadId: string; quotation: unknown; markSent: boolean }): Promise<QuotationState> {
+  const user = await requireUser()
+  try {
+    if (!isObjectId(input?.leadId)) return { ok: false, message: 'Lead not found' }
+    if ((await hit(`quote:${user.id}`, 40, 60 * 60_000)).blocked) return { ok: false, message: 'Too many quotations in an hour — wait a little' }
+    const r = await createQuotation(user, input.leadId, input.quotation, { markSent: !!input.markSent })
+    refresh()
+    return { ok: true, message: `Quotation ${r.quotationNo} is ready (Rs ${r.total.toLocaleString('en-US')}).`, quotationId: r.id, quotationNo: r.quotationNo }
+  } catch (error) {
+    if (isRedirect(error)) throw error
+    return errorState(error)
+  }
 }
 
 // ── WhatsApp numbers (Coexistence) ──

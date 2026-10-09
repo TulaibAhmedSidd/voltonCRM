@@ -205,6 +205,7 @@ export const ACTIVITY_TYPE_META: MetaMap<C.ActivityType> = {
   proof_reviewed: { label: en.activityType.proof_reviewed, tone: 'info', icon: ShieldCheck },
   visit_assigned: { label: en.activityType.visit_assigned, tone: 'installation', icon: MapPin },
   visit_updated: { label: en.activityType.visit_updated, tone: 'installation', icon: MapPin },
+  quotation_issued: { label: en.activityType.quotation_issued, tone: 'brand', icon: FileImage },
 }
 
 export const VISIT_STATUS_META: MetaMap<C.VisitStatus> = {

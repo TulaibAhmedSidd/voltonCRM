@@ -133,6 +133,7 @@ export const en = {
     proof_reviewed: 'Proof reviewed',
     visit_assigned: 'Site visit assigned',
     visit_updated: 'Site visit updated',
+    quotation_issued: 'Quotation issued',
   },
   notificationType: {
     new_lead: 'New lead',

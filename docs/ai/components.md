@@ -62,6 +62,7 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | WhatsAppNumbersPanel | whatsapp-numbers-panel.tsx | `numbers, agents, signup` — Settings → WhatsApp numbers (admins): connected numbers, whose phone, history status |
 | ConnectWhatsAppButton | connect-whatsapp-button.tsx | `appId, configId, agents` — client: Meta Embedded Signup (Coexistence or new number) → connectWhatsAppNumberAction |
 | ExportLeads | export-leads.tsx | `filters` — Leads page (managers/admins): "Download Excel report" — period (today / week / month…) or date range → /api/exports/leads |
+| QuotationBuilder | quotation-builder.tsx | `leadId, initial, quotations, canCreate, customer` — client: lead page → Quotation tab: every field (system, panels, inverter, battery, structure, wiring, protection, net metering, transport, labour, extras, discount, warranty, terms), live total + words, Generate PDF, Open / Download / Share |
 | QueuePanel | queue-panel.tsx | `teams` from `getQueuePanels()` — why leads wait + "Assign waiting leads now" |
 | AlertPrefsForm | alert-prefs-form.tsx | `prefs, employees` — Settings → My alerts |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |

@@ -1,9 +1,11 @@
 export * from '@/server/db/models/org'
 export * from '@/server/db/models/leads'
 export * from '@/server/db/models/system'
+export * from '@/server/db/models/quotations'
 
 import { Attendance, Department, Session, Team, User } from '@/server/db/models/org'
 import { Activity, Contact, ContactAttempt, FollowUp, Lead, LeadAssignment, Visit } from '@/server/db/models/leads'
+import { Quotation } from '@/server/db/models/quotations'
 import {
   AuditLog,
   Counter,
@@ -31,6 +33,7 @@ export const ALL_MODELS = [
   Contact,
   Lead,
   LeadAssignment,
+  Quotation,
   ContactAttempt,
   FollowUp,
   Activity,

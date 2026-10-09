@@ -140,3 +140,30 @@
 - Built-in .xlsx writer (`src/server/lib/xlsx.ts`, no new package): frozen bold header, filter buttons, column widths. Checked by opening a sample in real Excel (3 sheets, Urdu text, numbers, filters).
 - **WhatsApp chat matching:** a chat or phone reply is now matched by the customer's phone numbers **and** their separate WhatsApp number. Before, a lead whose form had a different WhatsApp number got a duplicate customer / lead, and the phone reply was not linked. Index added on `contacts.whatsappE164`.
 - Tests: tests/unit/xlsx.test.ts, tests/db/reports.test.ts (content, scope, period, filters, route access, audit), matching test in coexistence.test.ts.
+
+## Later — Quotation PDF on every lead + Meta/WhatsApp Word guide
+- **Lead page → Quotation tab.** Agents (on their accepted, open lead), managers and admins fill in:
+  - system type (On-Grid / Hybrid / Off-Grid) and size
+  - panels (model, watt, quantity, price), inverter, battery
+  - structure (type, details, price), wiring & cables, protection & accessories
+  - net metering, transportation, labour / installation, up to 8 extra items, discount
+  - warranty (panel years, inverter, battery, free service years)
+  - validity, installation time, payment terms, notes
+  - Model suggestions come from the voltonsolar.com catalogue. Default charges match the website: structure 20,000, wiring 35,000, labour 40,000.
+  - The total and the amount in words update live.
+- **Generate quotation PDF:**
+  - number VO-1001, VO-1002… saved as an unchangeable snapshot (`quotations` collection); a change makes a new number
+  - logged in the timeline; the lead moves to "Quotation sent" (optional, forward only)
+  - Open / Download / Share — on phones the share sheet lets you send the PDF straight to WhatsApp
+- **The PDF** (built-in writer `src/server/lib/pdf.ts`, no new package; logo embedded so it works on Vercel):
+  - dark Volton header with the logo, QUOTATION number, date and valid-until
+  - Prepared for (customer, phone, address, lead ref) and Prepared by (agent, title, phone, company contact)
+  - system summary strip; itemised table (items with no separate charge show "Included")
+  - subtotal / discount / TOTAL, and the amount in words (lakh / crore)
+  - warranty & after-sales; terms (validity, installation, payment and standard terms); notes
+  - agent signature block and a customer acceptance line
+  - footer on every page with address, phone, email, website and page x of y
+- Only people who can see the lead can open its quotations (`/api/quotations/[id]/pdf`).
+- PDF colours live in `src/styles/document-colors.ts` (colour lint rule).
+- `docs/guide/Volton-CRM-Meta-WhatsApp-Guide.docx`: Word guide covering how Meta forms / WhatsApp / Coexistence work, what is done, all keys, the remaining steps, daily use and fixes.
+- Tests: tests/unit/quotation.test.ts (maths, words, schema, PDF structure / xref / logo), tests/unit/quotation-builder.test.tsx (form, live total, generate), tests/db/quotations.test.ts (numbering, stage, access, PDF route).

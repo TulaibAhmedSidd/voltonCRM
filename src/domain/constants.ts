@@ -179,6 +179,7 @@ export const ACTIVITY_TYPES = [
   'proof_reviewed',
   'visit_assigned',
   'visit_updated',
+  'quotation_issued',
 ] as const
 export type ActivityType = (typeof ACTIVITY_TYPES)[number]
 

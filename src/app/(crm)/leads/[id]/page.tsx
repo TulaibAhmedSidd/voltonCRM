@@ -29,6 +29,9 @@ import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, p
 import { getLeadDetail, getTeamBoard } from '@/server/services/queries'
 import { AGENT_STAGES } from '@/server/services/leads'
 import { formatPkrCompact } from '@/lib/money'
+import { QuotationBuilder } from '@/components/crm/quotation-builder'
+import { defaultQuotation } from '@/domain/quotation'
+import { lastQuotationInput, listQuotations } from '@/server/services/quotations'
 
 function describe(type: string, d: Record<string, unknown>): string {
   if (type === 'attempt_logged') {
@@ -52,6 +55,8 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const mine = lead.agent?.id === user.id
   const agents = manager ? (await getTeamBoard(user)).filter((m) => m.role === 'agent') : []
   const site = raw.site as Record<string, string | number | boolean | undefined>
+  const [quotations, lastQuote] = await Promise.all([listQuotations(user, lead.id), lastQuotationInput(user, lead.id)])
+  const canQuote = user.role !== 'field_agent' && lead.status === 'open' && (manager || (mine && lead.assignmentState === 'accepted'))
   // Steps + "what to do now" (src/domain/lead-journey.ts)
   const ordered = [...attempts].reverse()
   const journey = leadJourney({
@@ -210,6 +215,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
           <TabsTrigger value="whatsapp">WhatsApp ({messages.length})</TabsTrigger>
           <TabsTrigger value="followups">Follow-ups</TabsTrigger>
           <TabsTrigger value="site">Site & visit</TabsTrigger>
+          <TabsTrigger value="quotation">Quotation{quotations.length ? ` (${quotations.length})` : ''}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="timeline" className="space-y-4 pt-4">
@@ -298,6 +304,15 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               </ActionForm>
             ) : null}
           </SectionCard>
+        </TabsContent>
+        <TabsContent value="quotation" className="pt-4">
+          <QuotationBuilder
+            leadId={lead.id}
+            initial={lastQuote ?? defaultQuotation(typeof site.targetKw === 'number' ? site.targetKw : null)}
+            quotations={quotations}
+            canCreate={canQuote}
+            customer={{ name: lead.name, phone: lead.phone }}
+          />
         </TabsContent>
       </Tabs>
       {data.otherLeads.length ? (
