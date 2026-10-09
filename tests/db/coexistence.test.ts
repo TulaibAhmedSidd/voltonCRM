@@ -128,3 +128,19 @@ describe('Coexistence webhooks', () => {
     expect((await WhatsAppNumber.findOne({ phoneNumberId: '777000111' }).lean())?.lastSyncError).toMatch(/declined/)
   })
 })
+
+describe('which customer a WhatsApp chat belongs to', () => {
+  const value = (extra: object) => ({ entry: [{ changes: [{ field: 'messages', value: { metadata: { phone_number_id: '777000111', display_phone_number: '923001234567' }, ...extra } }] }] })
+  it('a customer with a separate WhatsApp number: their chat goes on their lead (no duplicate customer or lead)', async () => {
+    const { ingestLead } = await import('@/server/services/ingest')
+    const r = await ingestLead({ name: 'Two Numbers', phone: '+923008800001', whatsapp: '+923008800002', department: null, channel: 'meta_webhook', quiet: true })
+    if (r.status !== 'created') throw new Error(r.status)
+    await processWebhook(value({ messages: [{ id: 'wamid.two1', from: '923008800002', timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'Hi from my WhatsApp' } }] }))
+    expect(await Contact.countDocuments({ $or: [{ phones: '+923008800002' }, { whatsappE164: '+923008800002' }] })).toBe(1)
+    expect(await Lead.countDocuments({ 'source.channel': 'whatsapp', contactId: (await Contact.findOne({ phones: '+923008800001' }).lean())!._id })).toBe(0)
+    expect(String((await Message.findOne({ waMessageId: 'wamid.two1' }).lean())?.leadId)).toBe(r.leadId)
+    // a reply typed on the company phone to that WhatsApp number is matched too
+    await processWebhook(value({ message_echoes: [{ id: 'wamid.two2', to: '923008800002', timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'Salam' } }] }))
+    expect(String((await Message.findOne({ waMessageId: 'wamid.two2' }).lean())?.leadId)).toBe(r.leadId)
+  })
+})

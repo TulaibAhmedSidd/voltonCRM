@@ -59,6 +59,12 @@ async function numberFor(value: WaValue) {
   return WhatsAppNumber.create({ phoneNumberId: id, number: display, ownerType: 'department', status: 'connected', connectedAt: new Date() })
 }
 
+/**
+ * WhatsApp → customer: the chat number is matched against the customer's phone numbers AND their separate
+ * WhatsApp number (forms can have both), so a chat never lands on the wrong or a duplicate customer.
+ */
+const contactByWhatsApp = (e164: string) => Contact.findOne({ $or: [{ phones: e164 }, { whatsappE164: e164 }] })
+
 /** Process one webhook delivery. Idempotent: each wamid is stored once. */
 export async function processWebhook(payload: { entry?: { changes?: { field: string; value: WaValue }[] }[] }): Promise<void> {
   await connectDb()
@@ -71,7 +77,7 @@ export async function processWebhook(payload: { entry?: { changes?: { field: str
       for (const m of value.messages ?? []) {
         const phone = normalizePhone(`+${m.from}`)
         if (!phone) continue
-        let contact = await Contact.findOne({ phones: phone })
+        let contact = await contactByWhatsApp(phone)
         let lead = contact ? await Lead.findOne({ contactId: contact._id, status: 'open', deletedAt: null }).sort({ receivedAt: -1 }) : null
         if (!lead) {
           const ref = m.referral
@@ -88,7 +94,7 @@ export async function processWebhook(payload: { entry?: { changes?: { field: str
             },
           })
           if ('leadId' in result) lead = await Lead.findById(result.leadId)
-          contact = await Contact.findOne({ phones: phone })
+          contact = await contactByWhatsApp(phone)
         }
         if (!contact) continue
         try {
@@ -107,7 +113,7 @@ export async function processWebhook(payload: { entry?: { changes?: { field: str
       for (const m of value.message_echoes ?? []) {
         const phone = normalizePhone(`+${m.to}`)
         if (!phone) continue
-        const contact = await Contact.findOne({ phones: phone })
+        const contact = await contactByWhatsApp(phone)
         if (!contact) continue
         const lead = await Lead.findOne({ contactId: contact._id, status: 'open', deletedAt: null }).sort({ receivedAt: -1 })
         const agentId = number.agentId ?? lead?.assignment?.agentId ?? null
@@ -144,13 +150,13 @@ export async function processWebhook(payload: { entry?: { changes?: { field: str
         for (const thread of chunk.threads ?? []) {
           const customer = normalizePhone(`+${thread.id}`)
           if (!customer || !thread.messages?.length) continue
-          let contact = await Contact.findOne({ phones: customer })
+          let contact = await contactByWhatsApp(customer)
           if (!contact) {
             try {
               contact = await Contact.create({ name: customer, phones: [customer], whatsappE164: customer })
             } catch (error) {
               if (!isDuplicateKey(error)) throw error
-              contact = await Contact.findOne({ phones: customer })
+              contact = await contactByWhatsApp(customer)
             }
           }
           if (!contact) continue

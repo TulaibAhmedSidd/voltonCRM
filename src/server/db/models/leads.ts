@@ -60,6 +60,7 @@ const contactSchema = new Schema(
   { timestamps: true },
 )
 contactSchema.index({ phones: 1 }, { unique: true })
+contactSchema.index({ whatsappE164: 1 })
 contactSchema.plugin(auditFields)
 contactSchema.plugin(softDelete)
 

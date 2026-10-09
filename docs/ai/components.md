@@ -61,6 +61,7 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | LeadFilterPanel | lead-filter-panel.tsx | `filters, keep, href, agents, forms, showAgent, showDepartment` — Leads page: source chips + "Show more filters" panel (every column, day / period / date range), removable filter chips |
 | WhatsAppNumbersPanel | whatsapp-numbers-panel.tsx | `numbers, agents, signup` — Settings → WhatsApp numbers (admins): connected numbers, whose phone, history status |
 | ConnectWhatsAppButton | connect-whatsapp-button.tsx | `appId, configId, agents` — client: Meta Embedded Signup (Coexistence or new number) → connectWhatsAppNumberAction |
+| ExportLeads | export-leads.tsx | `filters` — Leads page (managers/admins): "Download Excel report" — period (today / week / month…) or date range → /api/exports/leads |
 | QueuePanel | queue-panel.tsx | `teams` from `getQueuePanels()` — why leads wait + "Assign waiting leads now" |
 | AlertPrefsForm | alert-prefs-form.tsx | `prefs, employees` — Settings → My alerts |
 | UserAdminList | user-admin-list.tsx | `users, viewer` — users with the actions the viewer may use (deactivate, temp password, remove) |

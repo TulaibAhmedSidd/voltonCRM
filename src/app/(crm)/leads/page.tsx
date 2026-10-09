@@ -20,6 +20,7 @@ import { requireUser } from '@/server/auth/session'
 import { LEAD_VIEWS, PAGE_SIZE, getQueuePanels, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
 import { activeFilterCount, parseLeadFilters } from '@/domain/lead-filters'
 import { LeadFilterPanel } from '@/components/crm/lead-filter-panel'
+import { ExportLeads } from '@/components/crm/export-leads'
 import { QueuePanel } from '@/components/crm/queue-panel'
 
 export const metadata = { title: 'Leads' }
@@ -115,6 +116,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         showAgent={user.role !== 'agent'}
         showDepartment={user.role === 'admin' || user.role === 'super_admin'}
       />
+      {canDelete ? <ExportLeads filters={filters} /> : null}
       {canDelete && rows.length ? <LeadBulkActions /> : null}
       {rows.length === 0 ? (
         activeFilterCount(filters) ? (

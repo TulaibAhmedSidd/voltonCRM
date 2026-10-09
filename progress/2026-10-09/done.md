@@ -124,3 +124,19 @@
 - Replies from the CRM go out from the number the customer wrote to (that number's own token).
 - New env: `META_APP_ID`, `META_ES_CONFIG_ID`. Guide: `docs/whatsapp-coexistence.md`.
 - Tests: tests/db/coexistence.test.ts (secret box, signup happy path + refused code, history import / replay / contact names / declined history, a later message opens a lead).
+
+## Later — Excel report for managers + WhatsApp chat matching fix
+- **Leads page → "Download Excel report"** (managers: own department, admins: all):
+  - Period: today, yesterday, this week, last 7 days, this month, last month, last 30 days, or a date range (Pakistan time).
+  - The Leads-page filters (source, agent, stage, …) apply too.
+  - Sheet **Summary**, per employee: leads assigned, tries, calls, WhatsApp, connected, not reached, interested, call back, not interested, deals won, flagged proofs, taps by mistake, and a TOTAL row.
+  - Sheet **Leads**: every lead received OR worked in the period, with its status at download time:
+    - agent, stage, status, close review
+    - tries, last try, last result / response / remarks
+    - follow-up, won value, lost reason, link to the lead
+  - Sheet **Activity**: every try, with time, employee, channel, result, response, time away, proof, flags, review and remarks.
+  - Sheet **About**: period, who downloaded it, filters.
+  - Each download is written in the admin activity log; a rate limit applies.
+- Built-in .xlsx writer (`src/server/lib/xlsx.ts`, no new package): frozen bold header, filter buttons, column widths. Checked by opening a sample in real Excel (3 sheets, Urdu text, numbers, filters).
+- **WhatsApp chat matching:** a chat or phone reply is now matched by the customer's phone numbers **and** their separate WhatsApp number. Before, a lead whose form had a different WhatsApp number got a duplicate customer / lead, and the phone reply was not linked. Index added on `contacts.whatsappE164`.
+- Tests: tests/unit/xlsx.test.ts, tests/db/reports.test.ts (content, scope, period, filters, route access, audit), matching test in coexistence.test.ts.

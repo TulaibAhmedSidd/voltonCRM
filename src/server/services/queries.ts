@@ -150,7 +150,7 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** Mongo conditions for the "More filters" panel. Each is ANDed with the user's scope, so nothing can widen it. */
-async function filterConditions(user: SessionUser, f: LeadFilters): Promise<Record<string, unknown>[]> {
+export async function filterConditions(user: SessionUser, f: LeadFilters): Promise<Record<string, unknown>[]> {
   const conds: Record<string, unknown>[] = []
   if (f.source) conds.push(sourceCondition(f.source))
   if (f.stage) conds.push({ stage: f.stage })
