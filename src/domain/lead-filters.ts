@@ -6,7 +6,7 @@ import { DEPARTMENTS, STAGES, type AdPlatform, type Department, type LeadChannel
 import { pktParts } from '@/lib/dates-pkt'
 
 /** Where the lead came from, as a manager thinks about it. */
-export const LEAD_SOURCE_FILTERS = ['facebook', 'instagram', 'meta', 'whatsapp', 'whatsapp_ad', 'sheet', 'manual'] as const
+export const LEAD_SOURCE_FILTERS = ['facebook', 'instagram', 'meta', 'whatsapp', 'whatsapp_ad', 'website', 'sheet', 'manual'] as const
 export type LeadSourceFilter = (typeof LEAD_SOURCE_FILTERS)[number]
 export const SOURCE_FILTER_LABEL: Record<LeadSourceFilter, string> = {
   facebook: 'Facebook',
@@ -14,6 +14,7 @@ export const SOURCE_FILTER_LABEL: Record<LeadSourceFilter, string> = {
   meta: 'Meta forms (direct)',
   whatsapp: 'WhatsApp (all)',
   whatsapp_ad: 'WhatsApp ads',
+  website: 'Website',
   sheet: 'Google Sheet',
   manual: 'Added by hand',
 }
@@ -37,6 +38,8 @@ export const FOLLOWUP_FILTER_LABEL: Record<(typeof FOLLOWUP_FILTERS)[number], st
 
 export interface LeadFilters {
   source?: LeadSourceFilter
+  /** Several sources at once (Excel download): a lead matches if it came from ANY of them. */
+  sources?: LeadSourceFilter[]
   stage?: Stage
   department?: Department
   /** agent user id, or 'none' = nobody assigned */
@@ -55,6 +58,11 @@ export interface LeadFilters {
 export const FILTER_KEYS = ['source', 'stage', 'department', 'agent', 'attempts', 'followup', 'date', 'from', 'to', 'form', 'city'] as const
 
 const pick = <T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined => (value && (allowed as readonly string[]).includes(value) ? (value as T) : undefined)
+/** "facebook,whatsapp" → ['facebook', 'whatsapp'] (unknown values dropped; none → undefined). */
+const pickMany = <T extends string>(value: string | undefined, allowed: readonly T[]): T[] | undefined => {
+  const list = [...new Set((value ?? '').split(',').map((v) => v.trim()))].filter((v): v is T => (allowed as readonly string[]).includes(v))
+  return list.length ? list : undefined
+}
 const ymd = (v?: string) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined)
 const text = (v?: string, max = 80) => (v?.trim() ? v.trim().slice(0, max) : undefined)
 
@@ -62,6 +70,7 @@ export function parseLeadFilters(get: (key: string) => string | undefined): Lead
   const agent = get('agent')
   const f: LeadFilters = {
     source: pick(get('source'), LEAD_SOURCE_FILTERS),
+    sources: pickMany(get('sources'), LEAD_SOURCE_FILTERS),
     stage: pick(get('stage'), STAGES),
     department: pick(get('department'), DEPARTMENTS),
     agent: agent === 'none' || (agent && /^[a-f0-9]{24}$/i.test(agent)) ? agent : undefined,
@@ -128,10 +137,12 @@ export function sourceCondition(source: LeadSourceFilter): Record<string, unknow
       return { 'source.channel': 'whatsapp' }
     case 'whatsapp_ad':
       return { 'source.channel': 'whatsapp', $or: [{ 'source.ctwa.sourceId': { $type: 'string' } }, { 'source.ctwa.headline': { $type: 'string' } }] }
+    case 'website':
+      return { 'source.channel': 'website' }
     case 'sheet':
       return { 'source.channel': 'sheet' }
     case 'manual':
-      return { 'source.channel': { $in: ['manual', 'csv_import', 'website'] } }
+      return { 'source.channel': { $in: ['manual', 'csv_import'] } }
   }
 }
 

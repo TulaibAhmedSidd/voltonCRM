@@ -193,6 +193,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
                 placeholder="Choose agent"
                 options={[{ value: 'auto', label: 'Next in order (auto)' }, ...agents.map((a) => ({ value: a.id, label: `${a.name} · ${a.attendance === 'checked_in' ? 'in' : 'out'}` }))]}
               />
+              <p className="text-xs text-muted-foreground">A person you pick gets the lead straight away — no Accept step. &ldquo;Next in order&rdquo; still asks them to accept.</p>
               <Button type="submit" variant="outline" size="touch" className="w-full">
                 Assign
               </Button>

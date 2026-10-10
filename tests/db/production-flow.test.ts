@@ -1,7 +1,7 @@
 /**
  * The whole business day, end to end, through the REAL server actions (as the phone would call them):
  *   super admin → creates a manager → manager signs in, sets own password → creates agents → agents set passwords →
- *   check in → a new row lands in the Google Sheet → CRM pulls it → manager assigns it by hand → agent accepts →
+ *   check in → a new row lands in the Google Sheet → CRM pulls it → manager assigns it by hand (already accepted) →
  *   WhatsApp / call try 1 (no answer) → next day try 2 (no answer) → 3 days later try 3 → deal WON →
  *   manager approves → sales numbers update. Plus the Dead path (3 no-answers → manager disputes → re-opened).
  * Synthetic data only. Cookies/headers/redirect are simulated; everything else is the production code.
@@ -243,7 +243,7 @@ describe('2. a lead lands in the Google Sheet and reaches the right agent', () =
     expect(await Lead.countDocuments()).toBe(1) // nothing was imported twice
   })
 
-  it('"Sheet details" shows the extra columns of a lead (managers; agents after accepting)', async () => {
+  it('"Sheet details" shows the extra columns of a lead (managers, and the agent the manager gave it to)', async () => {
     const { Lead: L } = await import('@/server/db/models')
     await L.updateOne({ _id: leadId }, { extra: { 'Client Remarks': 'call after 5 pm', 'New Allocation': 'Yes' } })
     await signIn('bilal', 'Solar#Mgr2026')
@@ -251,7 +251,8 @@ describe('2. a lead lands in the Google Sheet and reaches the right agent', () =
     expect(view.ok).toBe(true)
     expect(view.extra).toEqual(expect.arrayContaining([['Client Remarks', 'call after 5 pm']]))
     await signIn('waji', 'Agent#Two2026')
-    expect(await A.getLeadDetailsAction(leadId)).toMatchObject({ ok: false, message: 'Accept the lead to see all its details.' })
+    // given by hand → already accepted → Waji sees everything at once
+    expect((await A.getLeadDetailsAction(leadId)).extra).toEqual(expect.arrayContaining([['Client Remarks', 'call after 5 pm']]))
   })
 
   it('Talha cannot open, call or close Waji\'s lead', async () => {
@@ -270,10 +271,8 @@ describe('3. three tries over three days, then the deal closes', () => {
     return run(A.logOutcomeAction(null, fd({ attemptId: tap.attemptId, leftAt: tapAt + 2_000, returnedAt: tapAt + 85_000, ...outcome })))
   }
 
-  it('Waji must accept first; WhatsApp opens with a greeting', async () => {
+  it('Waji needs no Accept (the manager gave it); WhatsApp opens with a greeting', async () => {
     await signIn('waji', 'Agent#Two2026')
-    expect(await A.tapAttemptAction(leadId, 'whatsapp_chat')).toEqual({ error: 'Accept the lead first' })
-    await A.acceptLeadAction(fd({ leadId }))
     const tap = await A.tapAttemptAction(leadId, 'whatsapp_chat')
     expect('href' in tap && tap.href).toMatch(/^https:\/\/wa\.me\/923009800002\?text=Assalam/)
     // save the open attempt as "no answer" so the next try can start
@@ -340,7 +339,6 @@ describe('4. the Dead path: 3 no-answers → manager checks → disputes → lea
       at(`${day}T07:00:00.000Z`)
       await signIn('talha', 'Agent#One2026')
       await A.checkInAction()
-      await A.acceptLeadAction(fd({ leadId: id }))
       const tap = await A.tapAttemptAction(id, 'phone_call')
       if ('error' in tap) throw new Error(tap.error)
       const res = await run(A.logOutcomeAction(null, fd({ attemptId: tap.attemptId, result: 'no_answer', leftAt: Date.now() + 1_000, returnedAt: Date.now() + 30_000 })))

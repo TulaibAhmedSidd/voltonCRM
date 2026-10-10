@@ -155,7 +155,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         showAgent={user.role !== 'agent' && !personId}
         showDepartment={user.role === 'admin' || user.role === 'super_admin'}
       />
-      {canDelete ? <ExportLeads filters={personId ? { ...filters, agent: personId } : filters} /> : null}
+      {canDelete ? <ExportLeads filters={personId ? { ...filters, agent: personId } : filters} agents={filterOptions.agents} showDepartment={user.role === 'admin' || user.role === 'super_admin'} /> : null}
       {rows.length === 0 ? (
         activeFilterCount(filters) ? (
           <EmptyState title="No leads match these filters" description="Remove a filter above or press Clear all." />

@@ -103,6 +103,20 @@ describe('lead assignment (round-robin with check-in)', () => {
     expect(await agentOf(second.leadId)).toBe(w.agents[1].id)
   })
 
+  it('a lead the manager gives by hand is already accepted: no Accept step, no accept timer, contact timer kept', async () => {
+    const r = await newLead() // nobody checked in → waits in the queue
+    if (r.status !== 'created') throw new Error()
+    await manualAssign(r.leadId, w.agents[1].id, w.manager.id)
+    const lead = await Lead.findById(r.leadId).lean()
+    expect(lead?.assignment).toMatchObject({ state: 'accepted', method: 'manual' })
+    expect(lead?.assignment?.acceptedAt).toBeInstanceOf(Date)
+    expect(await Job.countDocuments({ leadId: lead!._id, kind: 'accept_due', status: 'pending' })).toBe(0)
+    expect(await Job.countDocuments({ leadId: lead!._id, kind: 'contact_due', status: 'pending' })).toBe(1)
+    const note = await Notification.findOne({ userId: w.agents[1].id, type: 'lead_assigned' }).sort({ createdAt: -1 }).lean()
+    expect(note?.title).toMatch(/gave you a lead — contact the customer/)
+    await expect(acceptLead(r.leadId, w.agents[1].id)).rejects.toThrow() // nothing left to accept
+  })
+
   it('same phone again → re-inquiry on the open lead, not a duplicate', async () => {
     const p = phone()
     const a = await ingestLead({ name: 'X', phone: p, department: 'INSTALLATION', channel: 'manual' })

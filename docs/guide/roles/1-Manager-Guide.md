@@ -71,7 +71,12 @@ The full list, same as before:
 - View chips: All open · New · Unassigned · Follow-ups · Interested · Won · Lost · Dead / junk · Everything.
 - Search by name, phone or lead number.
 - **Show more filters**: source, stage, agent, tries, follow-up, form / campaign, city, received date (Today, This week, This month… or a date range).
-- **Download Excel report**: Summary, Leads and Activity sheets for any period. The filters you are using apply too.
+- **Download Excel report** (opens like an accordion) — choose before downloading:
+  1. **Period**: Today, Yesterday, This week, Last 7 days, This month, Last month, Last 30 days, or **From – To dates**.
+  2. **Sources**: tick one or more — e.g. Facebook + WhatsApp + Website together — or All sources.
+  3. **Which leads**: *Received in this period* (e.g. "all Facebook leads of this month") or *Received or worked on in this period*.
+  4. **More**: one employee (or "Not assigned"), a stage.
+  - The box shows "You will get: …" before you press **Download Excel**. The file has Summary, Leads and Activity sheets; its About sheet lists the filters used.
 - **Delete**: tick leads → write why → **Delete**. The lead is hidden but its history is kept.
 - **Sync Google Sheet now** pulls the Sheet immediately (normally not needed).
 
@@ -82,7 +87,7 @@ At the top: customer details, **What to do now**, and the contact buttons. Below
 |---|---|
 | Quotation | Make the quotation PDF (Volton classic or Modern design), send it on WhatsApp |
 | Stage | Move the lead to any stage. Lost needs a reason; Won needs the sale value. |
-| Manage | **Assign to** an agent, **Move to department**, **Ping** the agent, **Delete**, **Reopen** a closed lead |
+| Manage | **Assign to** an agent (a person you pick gets the lead **already accepted — no Accept step**, they can call at once; "Next in order" still asks them to accept), **Move to department**, **Ping** the agent, **Delete**, **Reopen** a closed lead |
 | Timeline & notes | Everything that happened, plus your notes |
 | Proof | Every call / chat try with its result and screenshot |
 | WhatsApp chat | The real WhatsApp conversation with the customer |

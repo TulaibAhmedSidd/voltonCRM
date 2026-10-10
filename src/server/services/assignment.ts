@@ -124,35 +124,47 @@ export async function autoAssign(leadId: Id, exclude: string[] = []): Promise<st
   return result.agentId
 }
 
-async function afterAssigned(leadId: Id, r: { agentId: string; assignmentId: string; acceptMin: number; contactMin: number; leadNo: string }) {
+async function afterAssigned(leadId: Id, r: { agentId: string; assignmentId: string; acceptMin: number; contactMin: number; leadNo: string; byManager?: string }) {
   const now = Date.now()
   // Timers of an earlier assignment must never fire against the new agent.
   await cancelJobs({ leadId: oid(leadId), kind: { $in: ['manager_window_end', 'accept_due', 'contact_due'] } })
-  await scheduleJob('accept_due', new Date(now + r.acceptMin * 60_000), `accept_due:${r.assignmentId}`, { leadId, assignmentId: r.assignmentId })
+  // A lead the manager gave by hand is already accepted — no accept timer, only "contact the customer".
+  if (!r.byManager) await scheduleJob('accept_due', new Date(now + r.acceptMin * 60_000), `accept_due:${r.assignmentId}`, { leadId, assignmentId: r.assignmentId })
   await scheduleJob('contact_due', new Date(now + r.contactMin * 60_000), `contact_due:${r.assignmentId}`, { leadId, assignmentId: r.assignmentId })
-  await notify({ userIds: [r.agentId], type: 'lead_assigned', title: 'New lead for you — accept now', body: r.leadNo, link: `/leads/${leadId}`, dedupeKey: `assigned:${r.assignmentId}` })
+  await notify({
+    userIds: [r.agentId],
+    type: 'lead_assigned',
+    title: r.byManager ? `${r.byManager} gave you a lead — contact the customer` : 'New lead for you — accept now',
+    body: r.leadNo,
+    link: `/leads/${leadId}`,
+    dedupeKey: `assigned:${r.assignmentId}`,
+  })
 }
 
-/** Manager/admin picks the agent. Does not move the round-robin pointer. */
+/**
+ * Manager/admin picks the agent. Does not move the round-robin pointer. The lead is ACCEPTED straight away (owner's
+ * rule 2026-10-10): the employee gets no Accept button, the number is visible and they can call at once.
+ */
 export async function manualAssign(leadId: Id, agentId: string, byUserId: string, method: AssignmentMethod = 'manual'): Promise<void> {
   await connectDb()
   const target = await Lead.findById(leadId).select('teamId departmentId').lean()
   const agent = await User.findOne({ _id: oid(agentId), role: 'agent', isActive: true, deletedAt: null }).lean()
   if (!agent || String(agent.departmentId) !== String(target?.departmentId)) throw new UserError("Pick an active agent of this lead's department")
   const team = target?.teamId ? await Team.findById(target.teamId).lean() : null
+  const by = await User.findById(oid(byUserId)).select('name').lean()
   const r = await withTransaction(async (session) => {
     const lead = await Lead.findById(leadId).session(session)
     if (!lead || lead.status !== 'open') throw new UserError('Lead is not open')
     const now = new Date()
     const previous = lead.assignment?.agentId ? String(lead.assignment.agentId) : null
     await LeadAssignment.updateMany({ leadId: lead._id, endedAt: null }, { endedAt: now, reason: 'reassigned' }, { session })
-    const [assignment] = await LeadAssignment.create([{ leadId: lead._id, agentId: oid(agentId), by: oid(byUserId), method, assignedAt: now }], { session })
-    lead.set('assignment', { agentId: oid(agentId), state: 'assigned', assignedAt: now, assignedBy: oid(byUserId), method, acceptedAt: null, bounces: lead.assignment?.bounces ?? 0 })
+    const [assignment] = await LeadAssignment.create([{ leadId: lead._id, agentId: oid(agentId), by: oid(byUserId), method, assignedAt: now, acceptedAt: now }], { session })
+    lead.set('assignment', { agentId: oid(agentId), state: 'accepted', assignedAt: now, assignedBy: oid(byUserId), method, acceptedAt: now, bounces: lead.assignment?.bounces ?? 0 })
     await lead.save({ session })
-    await logActivity(lead._id, previous ? 'reassigned' : 'assigned', byUserId, { agentId, method, from: previous }, session)
+    await logActivity(lead._id, previous ? 'reassigned' : 'assigned', byUserId, { agentId, method, from: previous, accepted: 'by manager' }, session)
     return { assignmentId: String(assignment._id), leadNo: lead.leadNo }
   })
-  await afterAssigned(leadId, { agentId, assignmentId: r.assignmentId, acceptMin: team?.acceptWithinMin ?? 5, contactMin: team?.contactWithinMin ?? 15, leadNo: r.leadNo })
+  await afterAssigned(leadId, { agentId, assignmentId: r.assignmentId, acceptMin: team?.acceptWithinMin ?? 5, contactMin: team?.contactWithinMin ?? 15, leadNo: r.leadNo, byManager: by?.name ?? 'Your manager' })
 }
 
 /** Agent accepts (PDF "Sign/Claim"). */

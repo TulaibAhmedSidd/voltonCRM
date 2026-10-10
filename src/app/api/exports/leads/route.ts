@@ -24,8 +24,9 @@ export async function GET(request: NextRequest) {
   const filters = parseLeadFilters((k) => p.get(k) ?? undefined)
   const proto = request.headers.get('x-forwarded-proto') ?? request.nextUrl.protocol.replace(':', '')
   const host = request.headers.get('host') ?? request.nextUrl.host
-  const { file, leads, tries } = await buildLeadsReport(user, { period, filters, baseUrl: `${proto}://${host}` })
-  await AuditLog.create({ entity: 'lead', entityId: null, action: 'export', after: { period, filters, leads, tries }, actorId: oid(user.id) })
+  const basis = p.get('basis') === 'received' ? 'received' : 'worked'
+  const { file, leads, tries } = await buildLeadsReport(user, { period, filters, basis, baseUrl: `${proto}://${host}` })
+  await AuditLog.create({ entity: 'lead', entityId: null, action: 'export', after: { period, filters, basis, leads, tries }, actorId: oid(user.id) })
 
   const name = `volton-leads-${from || to ? `${from ?? 'start'}_to_${to ?? 'now'}` : `${preset.replace(/_/g, '-')}-${pktDateKey(new Date())}`}.xlsx`
   return new NextResponse(new Uint8Array(file), {

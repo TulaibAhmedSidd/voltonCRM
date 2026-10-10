@@ -88,6 +88,20 @@ describe('Excel report', () => {
     expect(activity.find((row) => row.includes('Wants 10 kW'))).toContain('1:35')
   })
 
+  it('"Received in this period" leaves out old leads that were only worked on today', async () => {
+    const r = await buildLeadsReport(mgr, { period: { preset: 'today' }, filters: {}, basis: 'received', baseUrl: 'https://crm.test' })
+    expect(read(r.file).leads.map((row) => row[2]).slice(1)).toEqual(['Today Customer'])
+  })
+
+  it('several sources at once (any of them), and the About sheet says which', async () => {
+    const both = await buildLeadsReport(mgr, { period: { from: '2000-01-01' }, filters: { sources: ['facebook', 'sheet'] }, basis: 'received', baseUrl: 'https://crm.test' })
+    expect(read(both.file).leads.map((row) => row[2]).slice(1).sort()).toEqual(['Old Customer', 'Today Customer', 'Untouched Old'])
+    const about = sheetRows(unzip(both.file).get('xl/worksheets/sheet4.xml')!)
+    expect(about.find((row) => row[0] === 'Filters')?.[1]).toBe('Sources: Facebook, Google Sheet')
+    const none = await buildLeadsReport(mgr, { period: { from: '2000-01-01' }, filters: { sources: ['whatsapp', 'website'] }, baseUrl: 'https://crm.test' })
+    expect(read(none.file).leads).toHaveLength(1) // header only
+  })
+
   it('a date range and the page filters narrow it', async () => {
     const older = await buildLeadsReport(mgr, { period: { from: '2000-01-01' }, filters: { source: 'sheet' }, baseUrl: 'https://crm.test' })
     expect(read(older.file).leads.map((row) => row[2]).slice(1).sort()).toEqual(['Old Customer', 'Untouched Old'])
@@ -122,5 +136,11 @@ describe('GET /api/exports/leads', () => {
     const { leads } = read(Buffer.from(await res.arrayBuffer()))
     expect(leads.map((row) => row[2]).slice(1)).toEqual(['Today Customer'])
     expect(await AuditLog.exists({ entity: 'lead', action: 'export' })).toBeTruthy()
+  })
+  it('reads sources=a,b and basis=received from the download form', async () => {
+    jar.clear()
+    await startSession(mgr.id)
+    const res = await route.GET(req('pfrom=2000-01-01&sources=facebook,sheet,bogus&basis=received'))
+    expect(read(Buffer.from(await res.arrayBuffer())).leads.map((row) => row[2]).slice(1).sort()).toEqual(['Old Customer', 'Today Customer', 'Untouched Old'])
   })
 })

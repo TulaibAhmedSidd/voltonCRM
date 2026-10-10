@@ -1,7 +1,7 @@
 import 'server-only'
 import type { Types } from 'mongoose'
 import type { AttemptChannel, CallResult, CustomerResponse, Department, LeadStatus, ProofFlag, ProofStatus, ReviewStatus, Stage, AssignmentState, LeadChannel, AdPlatform } from '@/domain/constants'
-import { DATE_PRESET_LABEL, receivedRange, sourceLabel, type DatePreset, type LeadFilters } from '@/domain/lead-filters'
+import { DATE_PRESET_LABEL, SOURCE_FILTER_LABEL, receivedRange, sourceLabel, type DatePreset, type LeadFilters } from '@/domain/lead-filters'
 import { ASSIGNMENT_STATE_META, ATTEMPT_CHANNEL_META, CALL_RESULT_META, CHANNEL_META, CUSTOMER_RESPONSE_META, DEPARTMENT_META, LEAD_STATUS_META, PROOF_FLAG_META, PROOF_STATUS_META, REVIEW_STATUS_META, STAGE_META } from '@/domain/ui-maps'
 import { en } from '@/i18n/en'
 import { pktParts } from '@/lib/dates-pkt'
@@ -39,7 +39,25 @@ export function periodLabel(p: ReportPeriod): string {
   return DATE_PRESET_LABEL[p.preset ?? 'today']
 }
 
-export async function buildLeadsReport(user: SessionUser, opts: { period: ReportPeriod; filters: LeadFilters; baseUrl: string }): Promise<{ file: Buffer; leads: number; tries: number }> {
+/** received = leads that ARRIVED in the period · worked = arrived OR were called / messaged in the period. */
+export type ReportBasis = 'received' | 'worked'
+
+/** "Sources: Facebook, WhatsApp (all) · Stage: Interested" for the About sheet. */
+export function filtersLabel(f: LeadFilters, agentName?: string | null): string {
+  const parts: string[] = []
+  const src = [...(f.sources ?? []), ...(f.source ? [f.source] : [])]
+  if (src.length) parts.push(`Sources: ${[...new Set(src)].map((s) => SOURCE_FILTER_LABEL[s]).join(', ')}`)
+  if (f.stage) parts.push(`Stage: ${en.stage[f.stage]}`)
+  if (f.department) parts.push(`Department: ${f.department}`)
+  if (f.agent) parts.push(`Employee: ${f.agent === 'none' ? 'nobody assigned' : (agentName ?? f.agent)}`)
+  if (f.attempts) parts.push(`Tries: ${f.attempts}`)
+  if (f.followup) parts.push(`Follow-up: ${f.followup}`)
+  if (f.form) parts.push(`Form / campaign: ${f.form}`)
+  if (f.city) parts.push(`City: ${f.city}`)
+  return parts.join(' · ') || 'All leads'
+}
+
+export async function buildLeadsReport(user: SessionUser, opts: { period: ReportPeriod; filters: LeadFilters; baseUrl: string; basis?: ReportBasis }): Promise<{ file: Buffer; leads: number; tries: number }> {
   await connectDb()
   const range = receivedRange(opts.period.from || opts.period.to ? { from: opts.period.from, to: opts.period.to } : { date: opts.period.preset ?? 'today' })
   const when: Record<string, Date> = { ...(range.from ? { $gte: range.from } : {}), ...(range.to ? { $lt: range.to } : {}) }
@@ -51,8 +69,10 @@ export async function buildLeadsReport(user: SessionUser, opts: { period: Report
   void _to
   const conds = await filterConditions(user, rest)
 
-  const tried = await ContactAttempt.find(Object.keys(when).length ? { serverTapAt: when } : {}).select('leadId').limit(MAX_ROWS).lean()
-  const leads = await Lead.find({ $and: [scope, ...conds, { $or: [{ receivedAt: when }, { _id: { $in: [...new Set(tried.map((t) => String(t.leadId)))] } }] }] })
+  const basis: ReportBasis = opts.basis ?? 'worked'
+  const tried = basis === 'worked' ? await ContactAttempt.find(Object.keys(when).length ? { serverTapAt: when } : {}).select('leadId').limit(MAX_ROWS).lean() : []
+  const inPeriod = Object.keys(when).length ? (basis === 'received' ? { receivedAt: when } : { $or: [{ receivedAt: when }, { _id: { $in: [...new Set(tried.map((t) => String(t.leadId)))] } }] }) : {}
+  const leads = await Lead.find({ $and: [scope, ...conds, inPeriod] })
     .sort({ receivedAt: -1 })
     .limit(MAX_ROWS)
     .lean()
@@ -258,8 +278,8 @@ export async function buildLeadsReport(user: SessionUser, opts: { period: Report
         ['Downloaded (PKT)', at(new Date())],
         ['Downloaded by', user.name],
         ['Scope', user.role === 'manager' ? 'My department' : 'All departments'],
-        ['Filters', Object.entries(rest).map(([k, v]) => `${k}: ${v}`).join(', ') || 'none'],
-        ['Leads', 'Received or worked in the period — status is the CURRENT status at download time'],
+        ['Filters', filtersLabel(rest, rest.agent && rest.agent !== 'none' ? person.get(rest.agent) : null)],
+        ['Leads', `${basis === 'received' ? 'Received in the period' : 'Received or worked in the period'} — status is the CURRENT status at download time`],
         ['Activity', 'Every call / WhatsApp try in the period'],
       ],
     },

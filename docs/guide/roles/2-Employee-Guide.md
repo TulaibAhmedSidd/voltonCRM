@@ -27,6 +27,7 @@ For: **Call agents**, **Field agents** and **staff with a custom role** (e.g. In
 2. Dashboard → **Accept VL-xxxxx** (or open the lead → **Accept this lead**).
 3. Accept within **5 minutes**. If you don't, your manager is told and the lead may go to the next agent.
 4. The customer's number is hidden until you accept.
+5. **A lead your manager gives you by hand needs no Accept** — the notification says "<manager> gave you a lead — contact the customer", the number is visible and you call straight away (within 15 minutes).
 
 ### 2.3 Contacting the customer (one "try")
 1. On the lead page tap **WhatsApp**, **WA call** or **Call**. The CRM records the time and opens WhatsApp / the dialer.

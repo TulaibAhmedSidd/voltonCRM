@@ -53,3 +53,8 @@
 - Website repo (voltonWithoutnode, branch dev/tulaibpsw): real password checks, HttpOnly session cookie, middleware guarding every change, editors blocked from settings, /api/seed and the secret setup page switched off, website passwords hashed and never sent to the browser.
 - Guides: Manager §11, Employee §5, Super admin §8.
 - Checked locally on test databases only: 25/25 website security checks, product picker, Team control, one-tap sign-in.
+
+## Excel download filters + no Accept for hand-assigned leads
+- Leads → Download Excel report (accordion): period chips or From–To dates, several sources at once (Facebook + WhatsApp + Website…), "Received in this period" vs "Received or worked on", employee / stage / department; "You will get: …" line; About sheet lists the filters in words. New "Website" source filter; "Added by hand" no longer includes website leads.
+- Manager picks an employee in Manage → Assign to: the lead is accepted straight away (no Accept button, no accept timer, number visible); notification "<manager> gave you a lead — contact the customer". "Next in order (auto)" still asks to accept.
+- Guides updated (Manager §4.2 / §4.3, Employee §2.2). 346 tests pass.
