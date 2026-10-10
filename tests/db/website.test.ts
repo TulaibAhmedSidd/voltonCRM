@@ -67,7 +67,7 @@ describe('POST /api/website/login', () => {
 })
 
 describe('GET /api/website/team', () => {
-  it('lists active people as a tree, without phones or emails', async () => {
+  it('lists active people as a tree, with work email for the website (shown there only when allowed)', async () => {
     const r = await team.GET(new NextRequest('http://crm.test/api/website/team', { headers: { authorization: `Bearer ${SECRET}` } }))
     const { team: people } = (await r.json()) as { team: { id: string; name: string; title: string; reportsTo: string | null; email?: string }[] }
     const by = (n: string) => people.find((p) => p.name === n)!
@@ -75,7 +75,7 @@ describe('GET /api/website/team', () => {
     expect(by('Owner').reportsTo).toBeNull()
     expect(by('Bilal Manager').reportsTo).toBe(by('Owner').id)
     expect(by('Ifran Agent')).toMatchObject({ title: 'Call agent', reportsTo: by('Bilal Manager').id })
-    expect(JSON.stringify(people)).not.toContain('@w.test')
+    expect(by('Ifran Agent').email).toBe('ifran@w.test')
     expect((await team.GET(new NextRequest('http://crm.test/api/website/team'))).status).toBe(401)
   })
 })
