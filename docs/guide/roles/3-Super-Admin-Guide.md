@@ -105,7 +105,26 @@ Roles you create are company-wide; a manager's roles belong to their department.
 
 ---
 
-## 8. When something goes wrong
+## 8. The website (voltonsolar.com) connection
+
+The CRM and the website share **products** and **logins**:
+
+- **Products:** the CRM reads the website's active products (panels, inverters, batteries) for the quotation builder. Nothing is copied — the website stays the one place to edit products and prices.
+- **Logins:** CRM users sign in to the website admin with their CRM username / password, or with the **Website admin** button in the CRM. The website asks the CRM whether the password is right and what the person may do.
+- **Access levels:** Website admin / Website editor / No website access — set per person in **Team → Add a team member → Website** (defaults in the Manager Guide §11.3).
+- **Website security (fixed with this change):** the website admin now really checks passwords, every change on the website needs a signed-in admin or editor, and the old "seed" link that could wipe all products is switched off.
+- **Team page:** the website can read the team list (name, job title, department, who they report to) from the CRM for its Team page. No phones or emails.
+
+**One-time setup (developer / super admin)**
+- [ ] The same secret **WEBSITE_SSO_SECRET** is set in Vercel for **both** the CRM and the website.
+- [ ] CRM (Vercel): **MAIN_SITE_MONGODB_URI** (website database) and **WEBSITE_URL** = https://voltonsolar.com.
+- [ ] Website (Vercel): **CRM_URL** = https://volton-crm.vercel.app and a strong **JWT_SECRET**.
+- [ ] Change the website database password after setup and update it in both places.
+- [ ] Old website-only admin accounts keep working (their password is now checked). Remove the ones nobody uses.
+
+---
+
+## 9. When something goes wrong
 
 | Problem | Check |
 |---|---|

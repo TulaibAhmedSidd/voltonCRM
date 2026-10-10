@@ -44,3 +44,12 @@
 - New warranty fields: solar panel / structure / inverter texts with Volton's wording as defaults.
 - Quotations show **info@voltonsolar.com** (`COMPANY.quoteEmail`).
 - PDF writer: JPEG pages (DCTDecode) and a dark logo variant. The page images (`src/server/assets/quote-pages.ts`) load only for the classic template.
+
+## Website (voltonsolar.com) connection
+- Quotation builder: "Pick from website products" for panels / inverters / batteries — read live (5-min cache, 3 s limit) from the website DB (MAIN_SITE_MONGODB_URI); inactive products hidden.
+- One login: CRM users sign in to voltonsolar.com/admin with their CRM username / password (CRM `POST /api/website/login`, shared WEBSITE_SSO_SECRET) or the "Website admin" menu link (60-second signed pass → website `/admin/sso`).
+- Website access per person (Team → Add a team member → Website): admin / editor / none. Defaults: managers+ and everyone already in the CRM = admin; new call agents and "Marketing" roles = editor; others none.
+- `GET /api/website/team` (shared secret): team tree for the coming website Team page (no phones / emails).
+- Website repo (voltonWithoutnode, branch dev/tulaibpsw): real password checks, HttpOnly session cookie, middleware guarding every change, editors blocked from settings, /api/seed and the secret setup page switched off, website passwords hashed and never sent to the browser.
+- Guides: Manager §11, Employee §5, Super admin §8.
+- Checked locally on test databases only: 25/25 website security checks, product picker, Team control, one-tap sign-in.

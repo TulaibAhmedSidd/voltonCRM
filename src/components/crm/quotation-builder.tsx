@@ -19,6 +19,7 @@ import {
   rupeesInWords,
   type QuotationInput,
 } from '@/domain/quotation'
+import type { CatalogItem, WebsiteCatalog } from '@/domain/website'
 import { createQuotationAction, sendQuotationWhatsAppAction } from '@/server/actions'
 import { cn } from '@/lib/utils'
 
@@ -111,7 +112,34 @@ function PdfButtons({ id, no, total, customer, onShare }: { id: string; no: stri
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Karachi' })
 
 /** Lead page → Quotation tab: fill the quotation, see the total live, generate a numbered PDF to send to the customer. */
-export function QuotationBuilder({ leadId, initial, quotations, canCreate, customer }: { leadId: string; initial: QuotationInput; quotations: QuotationRow[]; canCreate: boolean; customer: { name: string; phone: string } }) {
+/** Website product list (voltonsolar.com admin): picking one fills the model and price (and watt for panels). */
+function ProductPick({ items, onPick }: { items: CatalogItem[]; onPick: (item: CatalogItem) => void }) {
+  if (!items.length) return null
+  return (
+    <Field label={`Pick from website products (${items.length})`} className="sm:col-span-4" hint="Same products and prices as voltonsolar.com — you can still change the price below.">
+      <select
+        value=""
+        onChange={(e) => {
+          const item = items.find((i) => i.id === e.target.value)
+          if (item) onPick(item)
+        }}
+        className={control}
+      >
+        <option value="">Choose a product…</option>
+        {items.map((i) => (
+          <option key={i.id} value={i.id}>
+            {i.label}
+            {i.price ? ` — Rs ${formatRs(i.price)}` : ''}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}
+
+export function QuotationBuilder({ leadId, initial, quotations, canCreate, customer, catalog }: { leadId: string; initial: QuotationInput; quotations: QuotationRow[]; canCreate: boolean; customer: { name: string; phone: string }; catalog?: WebsiteCatalog }) {
+  const site = catalog?.ok ? catalog.items : { panels: [], inverters: [], batteries: [] }
+  const withSite = (own: string[], items: CatalogItem[]) => [...new Set([...items.map((i) => i.label), ...own])]
   const [q, setQ] = useState<QuotationInput>(initial)
   const [markSent, setMarkSent] = useState(true)
   const [pending, start] = useTransition()
@@ -180,9 +208,9 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
             generate()
           }}
         >
-          <datalist id="q-panels">{PANEL_SUGGESTIONS.map((s) => <option key={s} value={s} />)}</datalist>
-          <datalist id="q-inverters">{INVERTER_SUGGESTIONS.map((s) => <option key={s} value={s} />)}</datalist>
-          <datalist id="q-batteries">{BATTERY_SUGGESTIONS.map((s) => <option key={s} value={s} />)}</datalist>
+          <datalist id="q-panels">{withSite(PANEL_SUGGESTIONS, site.panels).map((s) => <option key={s} value={s} />)}</datalist>
+          <datalist id="q-inverters">{withSite(INVERTER_SUGGESTIONS, site.inverters).map((s) => <option key={s} value={s} />)}</datalist>
+          <datalist id="q-batteries">{withSite(BATTERY_SUGGESTIONS, site.batteries).map((s) => <option key={s} value={s} />)}</datalist>
 
           <fieldset className="space-y-2 rounded-xl p-3 ring-1 ring-foreground/10">
             <legend className="px-1 text-sm font-semibold">PDF design</legend>
@@ -218,6 +246,7 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
 
           <Section n={2} title="Solar panels">
             <div className="grid gap-3 sm:grid-cols-4">
+              <ProductPick items={site.panels} onPick={(p) => setQ((prev) => ({ ...prev, panelModel: p.label, panelPrice: p.price || prev.panelPrice, panelWatt: p.watt ?? prev.panelWatt }))} />
               <Field label="Brand / model" className="sm:col-span-2">
                 <input {...txt('panelModel', 'q-panels')} placeholder="e.g. LONGi Hi-MO X10 645W" />
               </Field>
@@ -235,6 +264,7 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
 
           <Section n={3} title="Inverter">
             <div className="grid gap-3 sm:grid-cols-4">
+              <ProductPick items={site.inverters} onPick={(p) => setQ((prev) => ({ ...prev, inverterModel: p.label, inverterPrice: p.price || prev.inverterPrice, inverterQty: prev.inverterQty || 1 }))} />
               <Field label="Brand / model" className="sm:col-span-2">
                 <input {...txt('inverterModel', 'q-inverters')} placeholder="e.g. GoodWe 12kW SP" />
               </Field>
@@ -249,6 +279,7 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
 
           <Section n={4} title="Battery (leave quantity 0 for no battery)">
             <div className="grid gap-3 sm:grid-cols-4">
+              <ProductPick items={site.batteries} onPick={(p) => setQ((prev) => ({ ...prev, batteryModel: p.label, batteryPrice: p.price || prev.batteryPrice, batteryQty: prev.batteryQty || 1 }))} />
               <Field label="Brand / model" className="sm:col-span-2">
                 <input {...txt('batteryModel', 'q-batteries')} placeholder="e.g. Itel 51.2V 100Ah LiFePO4" />
               </Field>

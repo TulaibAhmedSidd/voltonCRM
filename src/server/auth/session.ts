@@ -4,6 +4,7 @@ import { cache } from 'react'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { SESSION_DAYS, type Department, type Role } from '@/domain/constants'
+import { websiteAccessOf, type WebsiteAccess } from '@/domain/website'
 import { connectDb } from '@/server/db/connection'
 import { Department as DepartmentModel, Session, User } from '@/server/db/models'
 
@@ -19,6 +20,8 @@ export interface SessionUser {
   managerId: string | null
   /** Password was set by someone else — must choose their own before using the app. */
   mustChangePassword: boolean
+  /** voltonsolar.com admin access (src/domain/website.ts). */
+  websiteAccess?: WebsiteAccess
 }
 
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -63,6 +66,7 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
     departmentCode: (department?.code as Department | undefined) ?? null,
     managerId: user.managerId ? String(user.managerId) : null,
     mustChangePassword: !!user.mustChangePassword,
+    websiteAccess: websiteAccessOf({ role: user.role as Role, jobTitle: user.jobTitle, createdAt: user.createdAt, websiteAccess: user.websiteAccess }),
   }
 })
 

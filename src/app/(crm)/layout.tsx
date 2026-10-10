@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AppShell } from '@/components/common/app-shell'
+import { getServerEnv } from '@/lib/env'
 import { NotificationBell } from '@/components/crm/notification-bell'
 import { RefreshButton } from '@/components/common/refresh-button'
 import { InstallPrompt } from '@/components/common/pwa'
@@ -9,6 +10,12 @@ import { PushPrompt } from '@/components/common/push-prompt'
 import { pushPublicKey } from '@/server/services/push'
 import { requireUser } from '@/server/auth/session'
 import { logoutAction } from '@/server/actions'
+
+/** The Website admin link only shows once the website connection is set up. */
+const websiteConnected = () => {
+  const env = getServerEnv()
+  return !!(env.WEBSITE_SSO_SECRET && env.WEBSITE_URL)
+}
 
 export default async function CrmLayout({ children }: LayoutProps<'/'>) {
   const user = await requireUser()
@@ -19,6 +26,7 @@ export default async function CrmLayout({ children }: LayoutProps<'/'>) {
     <AppShell
       role={user.role}
       userName={user.name}
+      websiteAdmin={user.websiteAccess !== 'none' && websiteConnected()}
       actions={
         <>
           <RefreshButton />

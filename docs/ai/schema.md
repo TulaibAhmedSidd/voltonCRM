@@ -34,7 +34,7 @@ erDiagram
 |---|---|---|
 | `departments` | code (TRADING/INSTALLATION), name, stages, routingKeywords, workingHours | code unique |
 | `teams` | departmentId, managerId, **memberOrder** (the only order), rr {lastUid, lastPos}, version, managerWindowMin, paused, acceptWithinMin, contactWithinMin, maxPendingAccept, autoMoveOnAcceptTimeout | departmentId |
-| `user` | name, email, username, phone, role, departmentId, managerId, isActive, autoPausedAt, passwordHash (`select: false`, scrypt), mustChangePassword, lastLoginAt | email, username unique; {departmentId, role, isActive} |
+| `user` | name, email, username, phone, role, departmentId, managerId, websiteAccess (admin/editor/none, null = default), isActive, autoPausedAt, passwordHash (`select: false`, scrypt), mustChangePassword, lastLoginAt | email, username unique; {departmentId, role, isActive} |
 | `sessions` | tokenHash (SHA-256 of the cookie token), userId, expiresAt, userAgent | tokenHash unique; TTL on expiresAt |
 | `ratelimits` | key (e.g. login:user:x), count, resetAt | key unique; TTL on resetAt |
 | `sheetrows` | rowKey, tab, status (ingested/skipped/failed), leadId, tries, error, sheetRow | rowKey unique; {tab, status} |

@@ -97,6 +97,7 @@ export const en = {
     installation_photo: 'Installation photo',
     other: 'Other',
   },
+  websiteAccess: { admin: 'Website admin', editor: 'Website editor', none: 'No website access' },
   roofType: {
     rcc_slab: 'RCC slab',
     metal_sheet: 'Metal sheet',

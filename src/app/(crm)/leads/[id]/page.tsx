@@ -31,6 +31,7 @@ import { getLeadDetail, getTeamBoard } from '@/server/services/queries'
 import { AGENT_STAGES } from '@/server/services/leads'
 import { formatPkrCompact } from '@/lib/money'
 import { QuotationBuilder } from '@/components/crm/quotation-builder'
+import { websiteCatalog } from '@/server/services/website'
 import { PingAgent } from '@/components/crm/ping-agent'
 import { defaultQuotation } from '@/domain/quotation'
 import { lastQuotationInput, listQuotations } from '@/server/services/quotations'
@@ -58,7 +59,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const mine = lead.agent?.id === user.id
   const agents = manager ? (await getTeamBoard(user)).filter((m) => m.role === 'agent') : []
   const site = raw.site as Record<string, string | number | boolean | undefined>
-  const [quotations, lastQuote] = await Promise.all([listQuotations(user, lead.id), lastQuotationInput(user, lead.id)])
+  const [quotations, lastQuote, catalog] = await Promise.all([listQuotations(user, lead.id), lastQuotationInput(user, lead.id), user.role === 'field_agent' ? undefined : websiteCatalog()])
   const canStage = manager || (mine && lead.status === 'open' && lead.assignmentState === 'accepted')
   const canQuote = user.role !== 'field_agent' && lead.status === 'open' && (manager || (mine && lead.assignmentState === 'accepted'))
   // Steps + "what to do now" (src/domain/lead-journey.ts)
@@ -130,6 +131,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
             quotations={quotations}
             canCreate={canQuote}
             customer={{ name: lead.name, phone: lead.phone }}
+            catalog={catalog}
           />
         </>,
             },

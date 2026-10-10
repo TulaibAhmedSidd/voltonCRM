@@ -37,6 +37,7 @@ import { eraseCustomer } from '@/server/services/erasure'
 import { createInstruction, createJobRole, deleteJobRole, resolveJobRole, updateInstruction } from '@/server/services/work'
 import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
 import { quotationInput, formatRs } from '@/domain/quotation'
+import { WEBSITE_ACCESS, WEBSITE_ACCESS_LABEL, websiteAccessEditable } from '@/domain/website'
 import { removePushSubscription, savePushSubscription, sendPush } from '@/server/services/push'
 import { isHexColor, THEME_PRESETS } from '@/styles/runtime-theme'
 
@@ -515,6 +516,21 @@ export async function setUserActiveAction(_prev: ActionState, fd: FormData): Pro
     await AuditLog.create({ entity: 'user', entityId: target._id, action: 'update', before: { isActive: target.isActive }, after: { isActive: active }, actorId: oid(actor.id) })
     refresh()
     return { ok: true, message: active ? `${target.name} is active again` : `${target.name} deactivated — their leads went back to the queue` }
+  })
+}
+
+/** Team → person → Website: admin / editor / no access on voltonsolar.com (src/domain/website.ts). */
+export async function setWebsiteAccessAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    if (String(fd.get('userId')) === actor.id) return { ok: false, message: 'You cannot change your own website access' }
+    const access = z.enum(WEBSITE_ACCESS).safeParse(fd.get('websiteAccess'))
+    if (!access.success) return { ok: false, message: 'Choose the website access' }
+    const target = await loadManagedUser(actor, fd.get('userId'), websiteAccessEditable(actor.role))
+    await User.updateOne({ _id: target._id }, { websiteAccess: access.data })
+    await AuditLog.create({ entity: 'user', entityId: target._id, action: 'update', before: { websiteAccess: target.websiteAccess ?? null }, after: { websiteAccess: access.data }, actorId: oid(actor.id) })
+    refresh()
+    return { ok: true, message: `${target.name}: ${WEBSITE_ACCESS_LABEL[access.data]}` }
   })
 }
 

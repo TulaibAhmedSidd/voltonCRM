@@ -11,6 +11,7 @@ import type { SessionUser } from '@/server/auth/session'
 import { isAdminRole, leadScope, visitScope } from '@/server/auth/scope'
 import { oid } from '@/server/services/common'
 import { queueReport } from '@/server/services/assignment'
+import { websiteAccessOf } from '@/domain/website'
 
 const iso = (d?: Date | null) => (d ? new Date(d).toISOString() : undefined)
 
@@ -556,6 +557,7 @@ export async function listUsers(user: SessionUser) {
     departmentId: u.departmentId ? String(u.departmentId) : null,
     manager: u.managerId ? name.get(String(u.managerId)) ?? '—' : null,
     isActive: u.isActive,
+    websiteAccess: websiteAccessOf({ role: u.role as Role, jobTitle: u.jobTitle, createdAt: u.createdAt, websiteAccess: u.websiteAccess }),
   }))
 }
 

@@ -11,6 +11,10 @@
 export const ROLES = ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff'] as const
 export type Role = (typeof ROLES)[number]
 
+/** What a CRM user may do in the main website's admin (voltonsolar.com) — see src/domain/website.ts. */
+export const WEBSITE_ACCESS = ['admin', 'editor', 'none'] as const
+export type WebsiteAccess = (typeof WEBSITE_ACCESS)[number]
+
 export const DEPARTMENTS = ['TRADING', 'INSTALLATION'] as const
 export type Department = (typeof DEPARTMENTS)[number]
 

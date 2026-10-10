@@ -234,7 +234,43 @@ Instructions are tasks. Anyone can give one; they are most useful for roles with
 
 ---
 
-## 11. Quick answers
+## 11. The website (voltonsolar.com) and the CRM — one team, one login
+
+The company website **voltonsolar.com** has its own admin panel where products (panels, inverters, batteries), plans, deals and website content are managed. The CRM and the website are now connected.
+
+### 11.1 Website products in the quotation
+- In **Quotation**, the **Brand / model** boxes for **Solar panels, Inverter and Battery** have a **Pick from website products** list.
+- The list shows the products that are **active** in the website admin, with the website price. Picking one fills the model and the price (and the watt for panels). You can still change the price or type your own model.
+- A product added or changed in the website admin appears in the CRM within **5 minutes**. A product hidden on the website disappears from the list.
+- If the website cannot be reached, the old suggestion list is used — making quotations never stops.
+
+### 11.2 One login for both
+- Everyone uses their **CRM username (or email) and password** to sign in to the website admin at **voltonsolar.com/admin/login**. There are no separate website passwords for CRM staff.
+- Even quicker: in the CRM menu tap **Website admin** — the website admin opens already signed in.
+- When you **deactivate** or **remove** someone in the CRM, they also lose website access at once. A password reset in the CRM changes their website password too.
+
+### 11.3 Who can do what on the website
+
+| Website access | Can do on voltonsolar.com | Given by default to |
+|---|---|---|
+| **Website admin** | Everything: products, prices, plans, deals, content, settings (WhatsApp number, footer, menu, calculator values, website users) | Super admin, admins, managers, and everyone who was already in the CRM when this was switched on |
+| **Website editor** | Content and products: products, brands, categories, plans, deals, testimonials, videos, stats, trending brands, hero images | New call agents and anyone whose role name contains "Marketing" |
+| **No website access** | Cannot open the website admin | New field agents and other staff |
+
+**To change someone's access:** **Team → Add a team member** → find the person → **Website** → choose Website admin / Website editor / No website access → **Save**.
+
+### 11.4 Team page on the website (coming next)
+The website will get a **Team** page showing the Volton team with its hierarchy (who reports to whom). Names, job titles and departments come straight from the CRM — keep job titles (Team → Roles) and managers correct. Phone numbers and emails are **not** shown on the website.
+
+### 11.5 Checklist
+- [ ] Check every person's **Website** access once (Team → Add a team member).
+- [ ] Give **Website editor** to your marketing person (create a "Marketing" role in Team → Roles if needed).
+- [ ] Before making a quotation, make sure the product and price are up to date in the website admin.
+- [ ] When someone leaves: **Deactivate** them in the CRM — that also closes their website access.
+
+---
+
+## 12. Quick answers
 
 | Question | Answer |
 |---|---|

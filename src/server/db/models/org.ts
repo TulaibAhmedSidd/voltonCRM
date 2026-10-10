@@ -1,6 +1,6 @@
 /** Organisation: departments, teams (the round-robin order), users, attendance. */
 import { Schema, type InferSchemaType } from 'mongoose'
-import { ATTENDANCE_STATUSES, DEFAULT_ROLE, DEPARTMENTS, ROLES, STAGES, TEAM_DEFAULTS, AGENT_ACTIVITY_EVENTS, ALERT_SCOPES } from '@/domain/constants'
+import { ATTENDANCE_STATUSES, DEFAULT_ROLE, DEPARTMENTS, ROLES, STAGES, TEAM_DEFAULTS, AGENT_ACTIVITY_EVENTS, ALERT_SCOPES, WEBSITE_ACCESS } from '@/domain/constants'
 import { isE164 } from '@/lib/phone'
 import { auditFields, defineModel, softDelete } from '@/server/db/plugins'
 
@@ -66,6 +66,8 @@ const userSchema = new Schema(
     jobRoleId: { type: ObjectId, ref: 'JobRole', default: null },
     jobTitle: { type: String, trim: true, maxlength: 60, default: null },
     managerId: { type: ObjectId, ref: 'User', default: null },
+    /** voltonsolar.com admin access chosen by a manager. null = the default (src/domain/website.ts defaultWebsiteAccess). */
+    websiteAccess: { type: String, enum: WEBSITE_ACCESS, default: null },
     isActive: { type: Boolean, default: true },
     autoPausedAt: { type: Date, default: null },
     /** Set when an admin/manager chose the password — the user must pick their own at next sign-in. */

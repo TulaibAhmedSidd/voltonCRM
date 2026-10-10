@@ -124,7 +124,19 @@ You can also give an instruction to a colleague: **+ New instruction**.
 
 ---
 
-## 5. Quick answers
+## 5. The website (voltonsolar.com)
+
+- **Quotations:** the Solar panels, Inverter and Battery boxes have **Pick from website products** — the same products and prices as on voltonsolar.com. Pick one, then change the price if your manager agreed a different one.
+- **Same login:** if you have website access, sign in at **voltonsolar.com/admin/login** with your **CRM username and password**, or tap **Website admin** in the CRM menu.
+- **What you can do there** depends on the access your manager gave you:
+  - **Website editor** (call agents, marketing): update products, prices, plans, deals, testimonials, videos and other content.
+  - **Website admin** (managers): everything, including website settings.
+  - **No website access**: the **Website admin** button does not appear for you.
+- Anything you change on the website is live for customers straight away — double-check prices before saving.
+
+---
+
+## 6. Quick answers
 
 | Question | Answer |
 |---|---|

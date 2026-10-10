@@ -23,6 +23,12 @@ const serverEnvSchema = z.object({
   WEB_PUSH_PUBLIC_KEY: z.string().optional(),
   WEB_PUSH_PRIVATE_KEY: z.string().optional(),
   WEB_PUSH_SUBJECT: z.string().optional(),
+  /** Main website (voltonsolar.com) database — read for products in the quotation builder. */
+  MAIN_SITE_MONGODB_URI: z.string().startsWith('mongodb', 'MAIN_SITE_MONGODB_URI must start with mongodb:// or mongodb+srv://').optional(),
+  /** Shared with the website: lets CRM users sign in to the website admin. 32+ characters. */
+  WEBSITE_SSO_SECRET: z.string().min(32, 'WEBSITE_SSO_SECRET must be at least 32 characters').optional(),
+  /** Website address, e.g. https://voltonsolar.com */
+  WEBSITE_URL: z.string().url().optional(),
 })
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>

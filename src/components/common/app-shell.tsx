@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu } from 'lucide-react'
+import { Globe, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { StatusBadge } from '@/components/common/status-badge'
@@ -16,13 +16,15 @@ import { cn } from '@/lib/utils'
 export interface AppShellProps {
   role: Role
   userName: string
+  /** Show "Website admin" (opens voltonsolar.com/admin signed in). */
+  websiteAdmin?: boolean
   /** Header tools: notification bell, sign out (rendered in the phone top bar and desktop top bar). */
   actions?: React.ReactNode
   children: React.ReactNode
 }
 
 /** Signed-in layout: navy sidebar on desktop (lg+), top bar + bottom nav on phones. */
-export function AppShell({ role, userName, actions, children }: AppShellProps) {
+export function AppShell({ role, userName, websiteAdmin, actions, children }: AppShellProps) {
   const pathname = usePathname()
   const items = navItemsFor(role)
   const mobileItems = mobileNavItemsFor(role)
@@ -38,7 +40,7 @@ export function AppShell({ role, userName, actions, children }: AppShellProps) {
             <SideLink key={item.href} item={item} active={isActivePath(pathname, item.href)} />
           ))}
         </nav>
-        <UserBlock role={role} userName={userName} className="border-t border-sidebar-border px-5 py-4" />
+        <UserBlock role={role} userName={userName} websiteAdmin={websiteAdmin} className="border-t border-sidebar-border px-5 py-4" />
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -62,7 +64,7 @@ export function AppShell({ role, userName, actions, children }: AppShellProps) {
                   <SideLink key={item.href} item={item} active={isActivePath(pathname, item.href)} />
                 ))}
               </nav>
-              <UserBlock role={role} userName={userName} className="mt-auto border-t border-sidebar-border px-5 py-4" />
+              <UserBlock role={role} userName={userName} websiteAdmin={websiteAdmin} className="mt-auto border-t border-sidebar-border px-5 py-4" />
             </SheetContent>
           </Sheet>
           </div>
@@ -109,13 +111,20 @@ function SideLink({ item, active }: { item: NavItem; active: boolean }) {
   )
 }
 
-function UserBlock({ role, userName, className }: { role: Role; userName: string; className?: string }) {
+function UserBlock({ role, userName, websiteAdmin, className }: { role: Role; userName: string; websiteAdmin?: boolean; className?: string }) {
   return (
     <div className={cn('space-y-1 text-sm', className)}>
       <div className="flex items-center justify-between gap-2">
         <span className="truncate font-medium">{userName}</span>
         <StatusBadge {...ROLE_META[role]} size="sm" />
       </div>
+      {websiteAdmin ? (
+        // Plain link (no prefetch): every tap makes a fresh 60-second sign-in pass.
+        <a href="/api/website/sso" target="_blank" rel="noopener" className="flex min-h-11 items-center gap-2 font-medium text-sidebar-foreground underline-offset-4 hover:underline">
+          <Globe className="size-4" aria-hidden />
+          Website admin
+        </a>
+      ) : null}
       <Link href="/change-password" className="flex min-h-11 items-center text-sidebar-foreground/80 underline-offset-4 hover:underline">
         Change password
       </Link>
