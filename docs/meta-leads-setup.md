@@ -50,7 +50,10 @@ Vercel → Project → **Settings → Environment Variables** → add `META_PAGE
    - Verify token: the same verify token as above
    - **Verify and save**
 3. In the list of Page fields find **leadgen** → **Subscribe**.
-4. App → **App settings → Basic** → Privacy policy URL: `https://<your-vercel-domain>/privacy` → Save.
+4. App → **App settings → Basic**:
+   - Privacy policy URL: `https://<your-vercel-domain>/privacy`
+   - User data deletion → **Data deletion instructions URL**: `https://<your-vercel-domain>/data-deletion`
+   - App icon (1024×1024) and category (Business) if Meta asks → Save.
    Then at the top switch the app from **Development** to **Live**. (In Development mode Meta sends only test leads.)
 
 ## Step 6 — turn it on in the CRM

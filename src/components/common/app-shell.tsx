@@ -119,6 +119,9 @@ function UserBlock({ role, userName, className }: { role: Role; userName: string
       <Link href="/change-password" className="flex min-h-11 items-center text-sidebar-foreground/80 underline-offset-4 hover:underline">
         Change password
       </Link>
+      <Link href="/privacy" className="flex min-h-11 items-center text-xs text-sidebar-foreground/60 underline-offset-4 hover:underline">
+        Privacy policy
+      </Link>
     </div>
   )
 }

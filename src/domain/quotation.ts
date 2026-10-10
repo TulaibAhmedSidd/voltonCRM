@@ -5,14 +5,7 @@
  */
 import { z } from 'zod'
 
-export const COMPANY = {
-  name: 'VOLTON SOLAR',
-  tagline: 'Solar planning, products and execution under one roof',
-  address: 'Suite #6, A-137 Block 5, Gulshan-e-Iqbal, Karachi',
-  phone: '+92 303 2115055',
-  email: 'voltonsolar@gmail.com',
-  website: 'voltonsolar.com',
-} as const
+export { COMPANY } from '@/domain/company'
 
 export const QUOTE_SYSTEM_TYPES = ['on_grid', 'hybrid', 'off_grid'] as const
 export type QuoteSystemType = (typeof QUOTE_SYSTEM_TYPES)[number]

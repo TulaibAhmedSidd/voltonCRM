@@ -229,6 +229,6 @@ describe('proxy gate', () => {
     expect(gate('/leads', 'abc').status).toBe(200)
   })
   it('login, setup, APIs and the PWA files are public', () => {
-    for (const p of ['/login', '/setup', '/privacy', '/api/cron/tick', '/manifest.webmanifest', '/sw.js', '/offline.html', '/icons/icon-192.png', '/brand/volton-logo.png']) expect(gate(p).status).toBe(200)
+    for (const p of ['/login', '/setup', '/privacy', '/data-deletion', '/api/cron/tick', '/manifest.webmanifest', '/sw.js', '/offline.html', '/icons/icon-192.png', '/brand/volton-logo.png']) expect(gate(p).status).toBe(200)
   })
 })

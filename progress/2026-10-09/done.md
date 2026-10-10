@@ -194,3 +194,16 @@
 - **Agent dashboard → "My WhatsApp":** shows the connected number, or the steps (only an admin can connect it, with the agent's phone).
 - Checked on a local copy: Make quotation → tab opens → generate VO-1001 → send buttons → the 24-hour message; the pop-up toast appears bottom-right for a new alert.
 - Tests: tests/db/push.test.ts, tests/unit/ping-agent.test.tsx, WhatsApp document send in tests/db/quotations.test.ts.
+
+## 2026-10-10 — Privacy policy, data deletion page, footer (Meta "Live" requirement)
+- **/privacy** — full privacy policy (public, no login), covering:
+  - what we collect from customers (forms, WhatsApp incl. Coexistence history, calls without audio, site visits, quotations) and from staff
+  - sources; uses
+  - a Meta-data section (only to answer the enquiry; Platform Terms / WhatsApp Business Policy; reply STOP)
+  - processors (Meta, MongoDB Atlas, Vercel, Cloudinary, Google, push services)
+  - retention, security, rights, storage outside Pakistan, children, changes, contact
+- **/data-deletion** — how to ask for deletion (WhatsApp link with a ready message, email), what happens within 30 days, and how to stop messages only.
+- **Footer** (`SiteFooter`) with Privacy policy · Data deletion · voltonsolar.com, address, phone, email, © — on the sign-in / setup screens and the legal pages. "Privacy policy" link in the app menu.
+- Company details in one place: `src/domain/company.ts` (the quotation PDF uses it too).
+- Meta links: Privacy policy URL `https://volton-crm.vercel.app/privacy`; Data deletion instructions URL `https://volton-crm.vercel.app/data-deletion`.
+- Note: deletion requests are handled by an admin today (there is no "erase customer" button yet — lead delete hides the lead but keeps the history).
