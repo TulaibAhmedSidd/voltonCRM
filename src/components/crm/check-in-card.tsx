@@ -1,4 +1,5 @@
-import { Coffee, LogIn, LogOut, Play } from 'lucide-react'
+import { Coffee, LogIn, Play } from 'lucide-react'
+import { CheckOutButton } from '@/components/crm/check-out-button'
 import { SubmitButton } from '@/components/common/submit-button'
 import { AttendanceBadge } from '@/components/crm/badges'
 import type { AttendanceStatus } from '@/domain/constants'
@@ -49,12 +50,7 @@ export function CheckInCard({ status, since, onCheckIn, onCheckOut, onToggleBrea
                 {status === 'on_break' ? en.checkIn.endBreak : en.checkIn.startBreak}
               </SubmitButton>
             </form>
-            <form action={onCheckOut}>
-              <SubmitButton variant="secondary" size="touch" className="w-full" disabled={!onCheckOut}>
-                <LogOut data-icon="inline-start" />
-                {en.checkIn.checkOut}
-              </SubmitButton>
-            </form>
+            <CheckOutButton action={onCheckOut} disabled={!onCheckOut} />
           </>
         )}
       </div>
