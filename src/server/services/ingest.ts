@@ -6,6 +6,7 @@ import { normalizePhone } from '@/lib/phone'
 import { connectDb } from '@/server/db/connection'
 import { Contact, Department as DepartmentModel, Lead, Team, nextSequence } from '@/server/db/models'
 import { startAssignment } from '@/server/services/assignment'
+import { erasedSince } from '@/server/services/erasure'
 import { isDuplicateKey, logActivity, notify, oid } from '@/server/services/common'
 import { getSetting, nextOpening } from '@/server/services/settings'
 
@@ -56,6 +57,8 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
   const phone = normalizePhone(input.phone)
   if (!phone) return { status: 'invalid_phone' }
   if (input.source?.rowKey && (await Lead.exists({ 'source.rowKey': input.source.rowKey }))) return { status: 'duplicate_row' }
+  // Erased on request: old data coming back (Meta catch-up, old Sheet rows) is skipped; a NEW enquiry is accepted.
+  if (await erasedSince(phone, input.source?.submittedAt ?? input.receivedAt ?? new Date())) return { status: 'duplicate_row' }
 
   const department = input.department ?? (await getSetting('routing')).fallback
   const dept = department ? await DepartmentModel.findOne({ code: department }).lean() : null

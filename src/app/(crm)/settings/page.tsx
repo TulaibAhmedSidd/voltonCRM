@@ -1,8 +1,7 @@
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
-import { SelectField, TextField } from '@/components/common/fields'
-import { UsernameField } from '@/components/common/username-field'
-import { PasswordField } from '@/components/common/password-field'
+import { TextField } from '@/components/common/fields'
 import { SheetSources } from '@/components/crm/sheet-sources'
 import { AlertPrefsForm } from '@/components/crm/alert-prefs-form'
 import { ProofStorage } from '@/components/crm/proof-storage'
@@ -17,14 +16,11 @@ import { Lead, User, WhatsAppNumber } from '@/server/db/models'
 import { prefsOf } from '@/server/services/watch'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionCard } from '@/components/common/section-card'
-import { UserAdminList } from '@/components/crm/user-admin-list'
-import type { Role } from '@/domain/constants'
-import { en } from '@/i18n/en'
 import { requireRole } from '@/server/auth/session'
 import { isAdminRole } from '@/server/auth/scope'
 import { connectDb } from '@/server/db/connection'
-import { createUserAction, saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
-import { listDepartments, listUsers } from '@/server/services/queries'
+import { saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
+import { listUsers } from '@/server/services/queries'
 import { getSetting } from '@/server/services/settings'
 import { getSheetSources, statusKey } from '@/server/services/sheet'
 import type { SheetTabStatus } from '@/domain/sheet-columns'
@@ -34,17 +30,11 @@ export const metadata = { title: 'Settings' }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-/** Roles each viewer may create (server rule in actions.ts → creatableRoles). */
-function creatable(role: Role): Role[] {
-  if (role === 'super_admin') return ['manager', 'agent', 'field_agent', 'admin']
-  return ['agent', 'field_agent']
-}
-
 export default async function SettingsPage() {
   const user = await requireRole('admin', 'manager')
   const admin = isAdminRole(user.role)
   await connectDb()
-  const [users, departments, allSheets, sheetStatus, hours, theme] = await Promise.all([listUsers(user), listDepartments(), getSheetSources(), getSetting('sheet_status'), getSetting('working_hours'), getSetting('theme')])
+  const [users, allSheets, sheetStatus, hours, theme] = await Promise.all([listUsers(user), getSheetSources(), getSetting('sheet_status'), getSetting('working_hours'), getSetting('theme')])
   const [me, proofStats, cloudAccount] = await Promise.all([User.findById(user.id).select('role alertPrefs').lean(), proofStorageStats(user), cloudinaryUsage()])
   const myAlerts = prefsOf(me ?? { role: user.role })
   const [metaState, metaLeadCount] = admin ? await Promise.all([getSetting('meta_leads'), Lead.countDocuments({ 'source.channel': 'meta_webhook' })]) : [null, 0]
@@ -55,31 +45,15 @@ export default async function SettingsPage() {
   // Managers see and manage only their department's sheets.
   const sheets = admin ? allSheets : allSheets.filter((s) => s.department === user.departmentCode)
   const statusOf: Record<string, Record<string, SheetTabStatus | undefined>> = Object.fromEntries(sheets.map((s) => [s.id, Object.fromEntries(s.tabs.map((t) => [t, sheetStatus[statusKey(s, t)]]))]))
-  const roleOptions = creatable(user.role).map((r) => ({ value: r, label: en.role[r] }))
 
   return (
     <>
       <PageHeader title="Settings" description={user.role === 'manager' ? 'Add your call agents and field agents. New people choose their own password at first sign-in.' : undefined} />
 
-      <SectionCard title="Users" description="New users must choose their own password at first sign-in. Call agents join their department's assignment order automatically.">
-        <div className="grid gap-6 lg:grid-cols-2">
-          <UserAdminList users={users} viewer={{ id: user.id, role: user.role }} />
-          <ActionForm action={createUserAction} resetOnSuccess>
-            <p className="font-medium">Add a user</p>
-            <TextField label="Full name" name="name" required />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <UsernameField />
-              <PasswordField defaultVisible label="Temporary password" name="password" minLength={8} required autoComplete="off" hint="At least 8 characters, not 12345678. They choose their own at first sign-in." />
-              <TextField label="Phone (optional)" name="phone" inputMode="tel" placeholder="0300 1234567" hint="03XX XXXXXXX or +92…" />
-              <TextField label="Email (optional)" name="email" type="email" hint="Leave empty if they have none" />
-              <SelectField label="Role" name="role" defaultValue="agent" options={roleOptions} />
-              {admin ? <SelectField label="Department" name="departmentId" placeholder="—" options={departments.map((d) => ({ value: d.id, label: d.name }))} /> : null}
-            </div>
-            <Button type="submit" size="touch" className="w-full">
-              Add user
-            </Button>
-          </ActionForm>
-        </div>
+      <SectionCard title="Users and roles" description="Adding people, custom roles and who gets leads are now on the Team page.">
+        <Button asChild size="touch">
+          <Link href="/team#members">Open Team → add people & roles</Link>
+        </Button>
       </SectionCard>
 
       <section id="my-alerts" className="scroll-mt-20">

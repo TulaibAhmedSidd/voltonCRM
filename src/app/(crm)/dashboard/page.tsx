@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AlarmClock, CalendarClock, ListChecks, MapPin, UserPlus, Users } from 'lucide-react'
+import { AlarmClock, CalendarClock, ClipboardList, ListChecks, MapPin, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ActionTile } from '@/components/common/action-tile'
 import { PageHeader } from '@/components/common/page-header'
@@ -12,7 +12,8 @@ import { FollowUpItem } from '@/components/crm/follow-up-item'
 import { KpiGrid } from '@/components/crm/kpi-grid'
 import { LeadCard } from '@/components/crm/lead-card'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
-import { VISIT_STATUS_META } from '@/domain/ui-maps'
+import { INSTRUCTION_STATUS_META, VISIT_STATUS_META } from '@/domain/ui-maps'
+import { listInstructions } from '@/server/services/work'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { WhatsAppNumber } from '@/server/db/models'
@@ -114,6 +115,33 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
               <li>Keep your phone with you: the WhatsApp <b>Business</b> app on it must be updated, and you confirm the connection on the phone.</li>
               <li>Until then, keep using the WhatsApp button on each lead and add a screenshot as proof.</li>
             </ol>
+          )}
+        </SectionCard>
+      </>
+    )
+  }
+
+  if (user.role === 'staff') {
+    const { rows } = await listInstructions(user, 'mine')
+    const open = rows.filter((r) => r.status !== 'completed')
+    return (
+      <>
+        <PageHeader title={greeting} description="Your work instructions" />
+        {noticeEl}
+        <ActionTile href="/instructions" label="Open instructions" icon={ClipboardList} count={open.length} tone="brand" />
+        <SectionCard title={`To do now (${open.length})`} actions={<Button asChild variant="outline" size="touch"><Link href="/instructions">All</Link></Button>}>
+          {open.length === 0 ? <EmptyState title="Nothing to do" description="New instructions appear here and you get a notification." /> : (
+            <ul className="divide-y divide-border">
+              {open.slice(0, 8).map((i) => (
+                <li key={i.id} className="flex items-center justify-between gap-3 py-2">
+                  <Link href="/instructions" className="min-w-0">
+                    <p className="truncate font-medium">{i.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">from {i.giver.name}{i.dueAt ? ` · due ${formatPktDateTime(new Date(i.dueAt))}` : ''}</p>
+                  </Link>
+                  <StatusBadge {...INSTRUCTION_STATUS_META[i.status]} size="sm" />
+                </li>
+              ))}
+            </ul>
           )}
         </SectionCard>
       </>

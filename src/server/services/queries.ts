@@ -457,6 +457,7 @@ export async function listUsers(user: SessionUser) {
     username: u.username ?? '',
     phone: u.phone ?? '',
     role: u.role as Role,
+    jobTitle: (u as { jobTitle?: string | null }).jobTitle ?? null,
     department: (departments.find((d) => String(d._id) === String(u.departmentId))?.code ?? null) as Department | null,
     departmentId: u.departmentId ? String(u.departmentId) : null,
     manager: u.managerId ? name.get(String(u.managerId)) ?? '—' : null,

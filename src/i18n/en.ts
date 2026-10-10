@@ -14,7 +14,9 @@ export const en = {
     description: 'Foundation build — theme, components and data model.',
     openCatalog: 'Open component catalog',
   },
-  role: { super_admin: 'Super admin', admin: 'Admin', manager: 'Manager', agent: 'Call agent', field_agent: 'Field agent' },
+  role: { super_admin: 'Super admin', admin: 'Admin', manager: 'Manager', agent: 'Call agent', field_agent: 'Field agent', staff: 'Staff' },
+  instructionStatus: { todo: 'To do', in_progress: 'In progress', review: 'In review', completed: 'Completed', on_hold: 'On hold' },
+  instructionPriority: { normal: 'Normal', high: 'High', urgent: 'Urgent' },
   department: { TRADING: 'Trading', INSTALLATION: 'Installation' },
   leadStatus: { open: 'Open', won: 'Won', lost: 'Lost', unreachable: 'Unreachable', junk: 'Junk / Test' },
   stage: {
@@ -154,6 +156,7 @@ export const en = {
     sheet_problem: 'Google Sheet needs attention',
     agent_activity: 'Employee activity',
     manager_ping: 'Message from your manager',
+    instruction: 'Work instruction',
   },
   agentActivity: {
     lead_accepted: 'Accepted a lead',
@@ -168,7 +171,7 @@ export const en = {
   alertScope: { all: 'All my employees', selected: 'Only the employees I tick' },
   slaState: { ok: 'On time', due_soon: 'Due soon', breached: 'Overdue' },
   whatsappNumberStatus: { connected: 'Connected', pending: 'Pending', disconnected: 'Disconnected' },
-  auditAction: { create: 'Created', update: 'Updated', soft_delete: 'Deleted', restore: 'Restored', export: 'Exported' },
+  auditAction: { create: 'Created', update: 'Updated', soft_delete: 'Deleted', restore: 'Restored', export: 'Exported', erase: 'Erased (permanent)' },
   sheetField: {
     metaLeadId: 'Meta lead ID',
     submittedAt: 'Submitted at',

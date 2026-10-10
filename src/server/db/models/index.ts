@@ -2,10 +2,14 @@ export * from '@/server/db/models/org'
 export * from '@/server/db/models/leads'
 export * from '@/server/db/models/system'
 export * from '@/server/db/models/quotations'
+export * from '@/server/db/models/erasures'
+export * from '@/server/db/models/work'
 
 import { Attendance, Department, Session, Team, User } from '@/server/db/models/org'
 import { Activity, Contact, ContactAttempt, FollowUp, Lead, LeadAssignment, Visit } from '@/server/db/models/leads'
 import { Quotation } from '@/server/db/models/quotations'
+import { Erasure } from '@/server/db/models/erasures'
+import { Instruction, JobRole } from '@/server/db/models/work'
 import {
   AuditLog,
   Counter,
@@ -34,6 +38,9 @@ export const ALL_MODELS = [
   Lead,
   LeadAssignment,
   Quotation,
+  Erasure,
+  JobRole,
+  Instruction,
   ContactAttempt,
   FollowUp,
   Activity,

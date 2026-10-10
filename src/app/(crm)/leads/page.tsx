@@ -102,6 +102,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           </div>
         }
       />
+      {one('notice') === 'erased' ? <p role="status" className="rounded-lg bg-tone-success-soft px-3 py-2 text-sm text-tone-success-soft-foreground">The customer&apos;s data was erased permanently.</p> : null}
       {sources.length ? <LeadSourcesPanel sources={sources} /> : <AutoRefresh />}
       <Suspense>
         <SearchBox />

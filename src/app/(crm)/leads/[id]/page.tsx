@@ -25,7 +25,7 @@ import { en } from '@/i18n/en'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { isManagerOrAdmin } from '@/server/auth/scope'
-import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, changeStageAction, createVisitAction, reopenLeadAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
+import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, eraseCustomerAction, changeStageAction, createVisitAction, reopenLeadAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
 import { getLeadDetail, getTeamBoard } from '@/server/services/queries'
 import { AGENT_STAGES } from '@/server/services/leads'
 import { formatPkrCompact } from '@/lib/money'
@@ -169,6 +169,23 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
                 <p className="text-sm font-medium">Ping {lead.agent.name}</p>
                 <PingAgent agentId={lead.agent.id} agentName={lead.agent.name} leadId={lead.id} label={`Ping ${lead.agent.name.split(' ')[0]}`} placeholder="e.g. Please call this customer now" />
               </div>
+            ) : null}
+            {user.role === 'admin' || user.role === 'super_admin' ? (
+              <details className="md:col-span-3">
+                <summary className="flex min-h-11 cursor-pointer items-center text-sm text-tone-danger">Erase customer data (privacy request — permanent)…</summary>
+                <ActionForm action={eraseCustomerAction} className="max-w-md space-y-3 pt-2">
+                  <input type="hidden" name="leadId" value={lead.id} />
+                  <p className="text-sm text-muted-foreground">
+                    Use this when the customer asks for their data to be deleted. It permanently removes <b>{lead.name}</b>, all their leads (every department), WhatsApp chats, call records, notes, follow-ups, site visits,
+                    quotations and files. It cannot be undone. Only counts are kept in the admin log.
+                  </p>
+                  <TextField label="Type the last 4 digits of the customer's phone" name="last4" inputMode="numeric" maxLength={4} minLength={4} required autoComplete="off" />
+                  <CheckboxField label="I understand this cannot be undone" name="understand" required />
+                  <Button type="submit" variant="destructive" size="touch">
+                    Erase customer data
+                  </Button>
+                </ActionForm>
+              </details>
             ) : null}
             <details className="md:col-span-3">
               <summary className="flex min-h-11 cursor-pointer items-center text-sm text-muted-foreground">Delete this lead…</summary>

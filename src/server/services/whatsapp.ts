@@ -11,6 +11,7 @@ import type { SessionUser } from '@/server/auth/session'
 import { isDuplicateKey, logActivity, notify, oid, UserError } from '@/server/services/common'
 import { ingestLead } from '@/server/services/ingest'
 import { senderFor } from '@/server/services/whatsapp-onboarding'
+import { erasureTime } from '@/server/services/erasure'
 
 const GRAPH = 'https://graph.facebook.com/v23.0'
 
@@ -150,6 +151,10 @@ export async function processWebhook(payload: { entry?: { changes?: { field: str
         for (const thread of chunk.threads ?? []) {
           const customer = normalizePhone(`+${thread.id}`)
           if (!customer || !thread.messages?.length) continue
+          // Erased on request: chat history from before the erasure is not imported again.
+          const cut = await erasureTime(customer)
+          if (cut) thread.messages = thread.messages.filter((m) => Number(m.timestamp) * 1000 > cut.getTime())
+          if (!thread.messages.length) continue
           let contact = await contactByWhatsApp(customer)
           if (!contact) {
             try {

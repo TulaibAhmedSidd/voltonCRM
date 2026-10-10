@@ -9,20 +9,55 @@ import { StatusBadge } from '@/components/common/status-badge'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
 import { DEPARTMENT_META } from '@/domain/ui-maps'
 import { requireRole } from '@/server/auth/session'
-import { bulkReassignAction, moveTeamMemberAction, setTeamMemberAction, updateTeamSettingsAction } from '@/server/actions'
+import { bulkReassignAction, moveTeamMemberAction, setAutoLeadsAction, setTeamMemberAction, updateTeamSettingsAction } from '@/server/actions'
 import { PingAgent } from '@/components/crm/ping-agent'
-import { getTeamBoard, getTeams } from '@/server/services/queries'
+import { getTeamBoard, getTeams, listUsers } from '@/server/services/queries'
+import { RolesSection, UsersSection } from '@/components/crm/users-section'
+import { ROLE_META } from '@/domain/ui-maps'
 
 export const metadata = { title: 'Team' }
 
 export default async function TeamPage() {
   const user = await requireRole('admin', 'manager')
-  const [teams, board] = await Promise.all([getTeams(user), getTeamBoard(user)])
+  const [teams, board, people] = await Promise.all([getTeams(user), getTeamBoard(user), listUsers(user)])
+  const inOrder = new Set(teams.flatMap((t) => t.members.map((m: { id: string }) => m.id)))
+  const employees = people.filter((p) => (p.role === 'agent' || p.role === 'field_agent' || p.role === 'staff') && p.isActive)
   const now = new Date()
   const callAgents = board.filter((m) => m.role === 'agent')
   return (
     <>
-      <PageHeader title="Team" description="Assignment order, timings and who is working now." />
+      <PageHeader title="Team" description="People, who gets leads automatically, the assignment order, timings and who is working now." />
+      <section id="members" className="scroll-mt-20">
+        <SectionCard title={`Team members (${employees.length})`} description="Turn “Gets leads automatically” on or off for anyone. On = they get new leads in turn when checked in.">
+          {employees.length === 0 ? <EmptyState title="No employees yet" description="Add people below." /> : (
+            <ul className="divide-y divide-border">
+              {employees.map((p) => {
+                const on = inOrder.has(p.id)
+                return (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                    <span className="min-w-0">
+                      <span className="font-medium">{p.name}</span>
+                      <span className="ms-2 text-xs text-muted-foreground">{p.jobTitle ?? ROLE_META[p.role].label}</span>
+                    </span>
+                    {p.role === 'field_agent' ? (
+                      <StatusBadge label="Gets site visits automatically" tone="installation" size="sm" />
+                    ) : (
+                      <ActionForm action={setAutoLeadsAction} className="flex items-center gap-2">
+                        <input type="hidden" name="userId" value={p.id} />
+                        <input type="hidden" name="on" value={on ? 'false' : 'true'} />
+                        <StatusBadge label={on ? 'Gets leads automatically' : 'No new leads'} tone={on ? 'success' : 'neutral'} size="sm" />
+                        <Button type="submit" variant={on ? 'outline' : 'default'} size="touch">
+                          {on ? 'Turn off' : 'Turn on'}
+                        </Button>
+                      </ActionForm>
+                    )}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </SectionCard>
+      </section>
       {teams.length === 0 ? <EmptyState title="No team yet" description="Create a manager in Settings → Users — their team is created automatically." /> : null}
       {teams.map((team) => (
         <div key={team.id} className="grid gap-4 lg:grid-cols-2">
@@ -116,6 +151,8 @@ export default async function TeamPage() {
           ))
         )}
       </SectionCard>
+      <UsersSection user={user} />
+      <RolesSection user={user} />
     </>
   )
 }

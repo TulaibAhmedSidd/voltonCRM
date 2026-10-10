@@ -21,6 +21,7 @@ export function isObjectId(id: unknown): id is string {
 export async function loadLeadFor(user: SessionUser, leadId: unknown, access: LeadAccess) {
   if (!isObjectId(leadId)) throw new UserError('Lead not found')
   if (user.role === 'field_agent') throw new UserError('Field agents work from Site visits')
+  if (user.role === 'staff') throw new UserError('Your role does not work on leads — see Instructions')
   if (access === 'manage' && user.role !== 'admin' && user.role !== 'manager' && user.role !== 'super_admin') throw new UserError('Only a manager can do this')
   await connectDb()
   const lead = await Lead.findOne({ $and: [{ _id: new Types.ObjectId(leadId) }, leadScope(user)] })

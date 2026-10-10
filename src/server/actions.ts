@@ -33,6 +33,8 @@ import { sendWhatsAppDocument, sendWhatsAppText } from '@/server/services/whatsa
 import { saveMetaFormDepartments, subscribeMetaPage, syncMetaLeads } from '@/server/services/meta-leads'
 import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
 import { createQuotation, getQuotationFor } from '@/server/services/quotations'
+import { eraseCustomer } from '@/server/services/erasure'
+import { createInstruction, createJobRole, deleteJobRole, resolveJobRole, updateInstruction } from '@/server/services/work'
 import { buildQuotationPdf } from '@/server/services/quotation-pdf'
 import { quotationInput, formatRs } from '@/domain/quotation'
 import { removePushSubscription, savePushSubscription, sendPush } from '@/server/services/push'
@@ -435,10 +437,13 @@ export async function createUserAction(_prev: ActionState, fd: FormData): Promis
     if (badUsername) return { ok: false, message: badUsername, fieldErrors: { username: badUsername } }
     const email = str(fd, 'email')?.toLowerCase()
     if (email && !z.email().safeParse(email).success) return { ok: false, message: 'Email looks wrong — leave it empty if they have none', fieldErrors: { email: 'Invalid' } }
-    const role = z.enum(ROLES).safeParse(str(fd, 'role')).data
+    // A custom role ("job:<id>", Settings → Roles) maps to call agent (gets leads) or staff (instructions only).
+    const rawRole = str(fd, 'role') ?? ''
+    const job = rawRole.startsWith('job:') ? await resolveJobRole(actor, rawRole.slice(4)) : null
+    const role = job ? job.role : z.enum(ROLES).safeParse(rawRole).data
     if (!role) return { ok: false, message: 'Choose a role' }
     const data = { name: name.slice(0, 80), username, email, phone: str(fd, 'phone'), password: String(fd.get('password') ?? ''), role, departmentId: str(fd, 'departmentId') }
-    if (!creatableRoles(actor).includes(data.role)) return { ok: false, message: 'You cannot add this kind of user' }
+    if (!job && !creatableRoles(actor).includes(data.role)) return { ok: false, message: 'You cannot add this kind of user' }
     const problem = passwordProblem(data.password, data.username)
     if (problem) return { ok: false, message: problem, fieldErrors: { password: problem } }
     const departmentId = actor.role === 'manager' ? actor.departmentId : data.departmentId
@@ -456,6 +461,8 @@ export async function createUserAction(_prev: ActionState, fd: FormData): Promis
       role: data.role,
       departmentId: data.role === 'admin' ? null : departmentId ? oid(departmentId) : null,
       managerId: (data.role === 'agent' || data.role === 'field_agent') && team ? team.managerId : null,
+      jobRoleId: job?.jobRoleId ?? null,
+      jobTitle: job?.jobTitle ?? null,
       passwordHash: await hashPassword(data.password),
       // The person must choose their own password at first sign-in.
       mustChangePassword: true,
@@ -760,6 +767,94 @@ export async function syncMetaLeadsAction(_prev: ActionState, fd: FormData): Pro
     if (r.failed) parts.push(`${r.failed} failed: ${r.errors.join('; ')}`)
     return { ok: !r.failed, message: parts.join(' · ') }
   })
+}
+
+// ── Custom roles + work instructions ──
+
+/** Settings → Roles: a new role with its two answers (gets leads automatically? gets work instructions?). */
+export async function createJobRoleAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const autoLeads = fd.get('autoLeads')
+    const instructions = fd.get('instructions')
+    if (autoLeads !== 'yes' && autoLeads !== 'no') return { ok: false, message: 'Answer: does this role get leads automatically?' }
+    if (instructions !== 'yes' && instructions !== 'no') return { ok: false, message: 'Answer: does this role get work instructions?' }
+    await createJobRole(actor, { name: str(fd, 'name') ?? '', autoLeads: autoLeads === 'yes', instructions: instructions === 'yes' })
+    refresh()
+    return { ok: true, message: 'Role added — choose it in "Add a user".' }
+  })
+}
+
+export async function deleteJobRoleAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    await deleteJobRole(actor, str(fd, 'roleId') ?? '')
+    refresh()
+    return { ok: true, message: 'Role removed.' }
+  })
+}
+
+/**
+ * Team → "Gets leads automatically" for one employee. On: joins the department's lead order (a staff member becomes
+ * a call agent so they can open leads). Off: leaves the order; leads they already have stay with them.
+ */
+export async function setAutoLeadsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const target = await loadManagedUser(actor, fd.get('userId'), ['agent', 'staff', 'field_agent'])
+    const on = fd.get('on') === 'true'
+    if (target.role === 'field_agent') return { ok: false, message: 'Field agents get site visits automatically. To give them leads, add them again as a call agent.' }
+    const team = target.departmentId ? await Team.findOne({ departmentId: target.departmentId }) : null
+    if (!team) return { ok: false, message: `${target.name} has no department team — set their department first.` }
+    if (on && target.role === 'staff') await User.updateOne({ _id: target._id }, { $set: { role: 'agent', managerId: team.managerId } })
+    const before = team.memberOrder.map(String)
+    const order = before.filter((id: string) => id !== String(target._id))
+    if (on) order.push(String(target._id))
+    team.set('memberOrder', order.map(oid))
+    await team.save()
+    await AuditLog.create({ entity: 'team', entityId: team._id, action: 'update', before: { memberOrder: before }, after: { memberOrder: order, autoLeads: { user: String(target._id), on } }, actorId: oid(actor.id) })
+    refresh()
+    return { ok: true, message: on ? `${target.name} now gets leads automatically (when checked in).` : `${target.name} no longer gets new leads. Leads they already have stay with them.` }
+  })
+}
+
+/** Instructions tab: give someone a piece of work. */
+export async function createInstructionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireUser()
+  return attempt(async () => {
+    if ((await hit(`instr:${actor.id}`, 60, 60 * 60_000)).blocked) return { ok: false, message: 'Too many instructions in an hour — wait a little' }
+    const due = str(fd, 'dueAt')
+    const dueAt = due && /^\d{4}-\d{2}-\d{2}$/.test(due) ? new Date(`${due}T23:59:00+05:00`) : null
+    await createInstruction(actor, { assigneeId: str(fd, 'assigneeId') ?? '', title: str(fd, 'title') ?? '', details: str(fd, 'details'), priority: str(fd, 'priority'), dueAt })
+    refresh()
+    return { ok: true, message: 'Instruction sent — they get a notification.' }
+  })
+}
+
+/** Instructions tab: change status and / or add a note (both the giver and the person doing it). */
+export async function updateInstructionAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireUser()
+  return attempt(async () => {
+    await updateInstruction(actor, str(fd, 'id') ?? '', { status: str(fd, 'status'), note: str(fd, 'note') })
+    refresh()
+    return { ok: true, message: 'Updated.' }
+  })
+}
+
+// ── Privacy: erase a customer on request ──
+
+/** Admin / super admin: permanently erase this lead's customer (all their leads, chats, files). Confirm with the last 4 digits. */
+export async function eraseCustomerAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requireRole('admin')
+  let ok = false
+  const state = await attempt(async () => {
+    if (fd.get('understand') !== 'on') return { ok: false, message: 'Tick the box to confirm you understand this cannot be undone.' }
+    const r = await eraseCustomer(user, str(fd, 'leadId') ?? '', str(fd, 'last4') ?? '')
+    ok = true
+    return { ok: true, message: `Erased: ${r.leads} lead(s), ${r.messages} message(s), ${r.files} file(s).` }
+  })
+  if (ok) redirect('/leads?notice=erased')
+  return state
 }
 
 // ── Phone / PC notifications ──

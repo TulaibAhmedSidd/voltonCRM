@@ -64,6 +64,21 @@ export const ROLE_META: MetaMap<C.Role> = {
   manager: { label: en.role.manager, tone: 'info', icon: UserCheck },
   agent: { label: en.role.agent, tone: 'neutral', icon: User },
   field_agent: { label: en.role.field_agent, tone: 'installation', icon: MapPin },
+  staff: { label: en.role.staff, tone: 'neutral', icon: User },
+}
+
+export const INSTRUCTION_STATUS_META: MetaMap<C.InstructionStatus> = {
+  todo: { label: en.instructionStatus.todo, tone: 'neutral', icon: Inbox },
+  in_progress: { label: en.instructionStatus.in_progress, tone: 'info', icon: Clock },
+  review: { label: en.instructionStatus.review, tone: 'warning', icon: ShieldCheck },
+  completed: { label: en.instructionStatus.completed, tone: 'success', icon: Check },
+  on_hold: { label: en.instructionStatus.on_hold, tone: 'danger', icon: Flag },
+}
+
+export const INSTRUCTION_PRIORITY_META: MetaMap<C.InstructionPriority> = {
+  normal: { label: en.instructionPriority.normal, tone: 'neutral', icon: Flag },
+  high: { label: en.instructionPriority.high, tone: 'warning', icon: Flag },
+  urgent: { label: en.instructionPriority.urgent, tone: 'danger', icon: Flag },
 }
 
 export const DEPARTMENT_META: MetaMap<C.Department> = {
@@ -228,6 +243,8 @@ export const WHATSAPP_NUMBER_STATUS_META: MetaMap<C.WhatsAppNumberStatus> = {
 export const ENUM_UI_MAPS = {
   ROLES: [C.ROLES, ROLE_META],
   DEPARTMENTS: [C.DEPARTMENTS, DEPARTMENT_META],
+  INSTRUCTION_STATUSES: [C.INSTRUCTION_STATUSES, INSTRUCTION_STATUS_META],
+  INSTRUCTION_PRIORITIES: [C.INSTRUCTION_PRIORITIES, INSTRUCTION_PRIORITY_META],
   LEAD_STATUSES: [C.LEAD_STATUSES, LEAD_STATUS_META],
   STAGES: [C.STAGES, STAGE_META],
   LEAD_CHANNELS: [C.LEAD_CHANNELS, CHANNEL_META],

@@ -62,6 +62,9 @@ const userSchema = new Schema(
     passwordHash: { type: String, select: false },
     role: { type: String, enum: ROLES, required: true, default: DEFAULT_ROLE },
     departmentId: { type: ObjectId, ref: 'Department', default: null },
+    /** Custom role (Settings → Roles) — its name is shown as the job title. */
+    jobRoleId: { type: ObjectId, ref: 'JobRole', default: null },
+    jobTitle: { type: String, trim: true, maxlength: 60, default: null },
     managerId: { type: ObjectId, ref: 'User', default: null },
     isActive: { type: Boolean, default: true },
     autoPausedAt: { type: Date, default: null },

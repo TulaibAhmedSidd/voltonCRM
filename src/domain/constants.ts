@@ -7,7 +7,8 @@
 
 /** agent = call agent (phone/WhatsApp); field_agent = outdoor site-visit agent (Excel "Visits" tab). */
 /** super_admin = owner: everything an admin can do + add/remove managers and admins. */
-export const ROLES = ['super_admin', 'admin', 'manager', 'agent', 'field_agent'] as const
+/** staff = an employee with a custom role that does not work leads (gets work instructions only). */
+export const ROLES = ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff'] as const
 export type Role = (typeof ROLES)[number]
 
 export const DEPARTMENTS = ['TRADING', 'INSTALLATION'] as const
@@ -210,8 +211,16 @@ export const NOTIFICATION_TYPES = [
   'agent_activity',
   /** A manager nudged an agent ("please call this lead now"). */
   'manager_ping',
+  /** Work instruction given / updated (Instructions tab). */
+  'instruction',
 ] as const
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
+
+/** Work instructions (Instructions tab): given by a manager or a colleague, updated by both sides. */
+export const INSTRUCTION_STATUSES = ['todo', 'in_progress', 'review', 'completed', 'on_hold'] as const
+export type InstructionStatus = (typeof INSTRUCTION_STATUSES)[number]
+export const INSTRUCTION_PRIORITIES = ['normal', 'high', 'urgent'] as const
+export type InstructionPriority = (typeof INSTRUCTION_PRIORITIES)[number]
 
 export const SLA_STATES = ['ok', 'due_soon', 'breached'] as const
 export type SlaState = (typeof SLA_STATES)[number]
@@ -232,7 +241,7 @@ export type SheetRowStatus = (typeof SHEET_ROW_STATUSES)[number]
 export const INGEST_STATUSES = ['received', 'processed', 'failed', 'ignored'] as const
 export type IngestStatus = (typeof INGEST_STATUSES)[number]
 
-export const AUDIT_ACTIONS = ['create', 'update', 'soft_delete', 'restore', 'export'] as const
+export const AUDIT_ACTIONS = ['create', 'update', 'soft_delete', 'restore', 'export', 'erase'] as const
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
 
 export const SETTING_KEYS = ['working_hours', 'holidays', 'sla_defaults', 'sheet_config', 'follow_up_cadence', 'routing', 'theme', 'sheet_status', 'meta_leads'] as const

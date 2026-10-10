@@ -7,11 +7,12 @@ import { cn } from '@/lib/utils'
 
 const control = 'h-11 text-base md:text-sm'
 
-export function TextField({ label, name, hint, className, ...props }: { label: string; name: string; hint?: string } & React.ComponentProps<'input'>) {
+export function TextField({ label, name, hint, className, id, ...props }: { label: string; name: string; hint?: string } & React.ComponentProps<'input'>) {
+  const fieldId = id ?? name
   return (
     <div className={cn('space-y-1.5', className)}>
-      <Label htmlFor={name}>{label}</Label>
-      <Input id={name} name={name} className={control} {...props} />
+      <Label htmlFor={fieldId}>{label}</Label>
+      <Input id={fieldId} name={name} className={control} {...props} />
       {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   )
@@ -32,13 +33,15 @@ export function SelectField({
   options,
   placeholder,
   className,
+  id,
   ...props
 }: { label: string; name: string; options: { value: string; label: string }[]; placeholder?: string } & React.ComponentProps<'select'>) {
+  const fieldId = id ?? name
   return (
     <div className={cn('space-y-1.5', className)}>
-      <Label htmlFor={name}>{label}</Label>
+      <Label htmlFor={fieldId}>{label}</Label>
       <select
-        id={name}
+        id={fieldId}
         name={name}
         className={cn('w-full rounded-lg border border-input bg-card px-3 outline-none focus-visible:ring-3 focus-visible:ring-ring/50', control)}
         {...props}
