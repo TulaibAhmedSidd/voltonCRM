@@ -48,6 +48,7 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | TeamMemberRow | team-member-row.tsx | `member: TeamMemberView, now: Date` |
 | MessageBubble | message-bubble.tsx | `message: MessageView` |
 | KpiGrid | kpi-grid.tsx | `items: KpiItem[]` — PDF KPI labels |
+| EmployeeLeadList, EmployeeLeadNumbers, LeadProgressBar | employee-lead-list.tsx | `people: EmployeeLeadStats[], hrefFor` — Leads → "Leads by employee" cards (count, won/open/lost bar, numbers) |
 | ContactActions (client) | contact-actions.tsx | `leadId, leadName, leadNo, attemptCount, pending, lastResult, stageLabel` — big WhatsApp / WA call / Call tiles; outcome sheet explains why it opened (back from WhatsApp / unsaved tap / second tap), try X of 3, last result, "what happens next", "I tapped by mistake" |
 | ChatPanel (client) | chat-panel.tsx | `leadId, messages` — WhatsApp thread + send box |
 | NotificationBell (client) | notification-bell.tsx | — polls `/api/me/poll` every 20 s |

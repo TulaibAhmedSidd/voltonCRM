@@ -86,7 +86,7 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
   }
 }
 
-export const LEAD_VIEWS = ['all', 'new', 'unassigned', 'mine', 'followups', 'interested', 'lost', 'unreachable'] as const
+export const LEAD_VIEWS = ['all', 'new', 'unassigned', 'mine', 'followups', 'interested', 'won', 'lost', 'unreachable', 'any'] as const
 export type LeadView = (typeof LEAD_VIEWS)[number]
 export const PAGE_SIZE = 25
 
@@ -101,6 +101,8 @@ export interface LeadListParams {
   dir?: 'asc' | 'desc'
   /** "More filters" panel */
   filters?: LeadFilters
+  /** Leads page → Leads by employee → one person: the list AND the view counts are for this person only. */
+  personId?: string
 }
 
 export async function listLeads(user: SessionUser, params: LeadListParams): Promise<{ rows: LeadSummary[]; total: number; counts: Record<LeadView, number> }> {
@@ -113,9 +115,12 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
     mine: { status: 'open', 'assignment.agentId': oid(user.id) },
     followups: { status: 'open', nextFollowUpAt: { $ne: null } },
     interested: { status: 'open', stage: { $in: ['interested', 'requirement_collected', 'site_survey', 'quotation_pending', 'quotation_sent', 'negotiation'] } },
+    won: { status: 'won' },
     lost: { status: 'lost' },
     unreachable: { status: { $in: ['unreachable', 'junk'] } },
+    any: {},
   }
+  const person = params.personId && user.role !== 'agent' && Types.ObjectId.isValid(params.personId) ? { 'assignment.agentId': oid(params.personId) } : {}
   const extra: Record<string, unknown> = { ...views[params.view ?? 'all'] }
   if (params.stage) extra.stage = params.stage
   if (params.agentId && user.role !== 'agent' && Types.ObjectId.isValid(params.agentId)) extra['assignment.agentId'] = oid(params.agentId)
@@ -135,13 +140,13 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
   }
   const conds = await filterConditions(user, params.filters ?? {})
   // $and keeps the user's scope even when a view/filter uses the same field.
-  const filter: Record<string, unknown> = { $and: [scope, extra, ...conds] }
+  const filter: Record<string, unknown> = { $and: [scope, person, extra, ...conds] }
   const sortField = params.sort === 'followup' ? 'nextFollowUpAt' : params.sort === 'attempts' ? 'attemptCount' : 'receivedAt'
   const page = Math.max(1, params.page ?? 1)
   const [docs, total, countEntries] = await Promise.all([
     Lead.find(filter).sort({ [sortField]: params.dir === 'asc' ? 1 : -1 }).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).lean(),
     Lead.countDocuments(filter),
-    Promise.all(LEAD_VIEWS.map(async (v) => [v, await Lead.countDocuments({ $and: [scope, views[v]] })] as const)),
+    Promise.all(LEAD_VIEWS.map(async (v) => [v, await Lead.countDocuments({ $and: [scope, person, views[v]] })] as const)),
   ])
   const maps = await lookups(docs)
   return { rows: docs.map((d) => toSummary(d, maps, user)), total, counts: Object.fromEntries(countEntries) as Record<LeadView, number> }
@@ -183,6 +188,95 @@ export async function filterConditions(user: SessionUser, f: LeadFilters): Promi
     conds.push({ contactId: { $in: contacts.map((c) => c._id) } })
   }
   return conds
+}
+
+export interface EmployeeLeadStats {
+  id: string
+  name: string
+  role: Role
+  jobTitle: string | null
+  /** Checked in (or on a break) today. */
+  onDuty: boolean
+  total: number
+  open: number
+  /** Assigned but not accepted yet. */
+  waitingAccept: number
+  /** Open and never called / messaged. */
+  notContacted: number
+  /** Open, at stage "interested" or further. */
+  interested: number
+  won: number
+  /** Lost, dead (unreachable) or junk. */
+  closed: number
+  overdueFollowUps: number
+  lastAssignedAt: string | null
+}
+
+const INTERESTED_STAGES = ['interested', 'requirement_collected', 'site_survey', 'quotation_pending', 'quotation_sent', 'negotiation']
+
+/**
+ * Leads page → "Leads by employee": one row per person with how many leads they hold and how far they got.
+ * Every call agent in the manager's scope is listed (also with 0 leads), plus anyone else who holds leads. `range` limits it to leads received in that period.
+ */
+export async function employeeLeadStats(user: SessionUser, opts: { range?: { from?: Date; to?: Date }; personId?: string } = {}): Promise<EmployeeLeadStats[]> {
+  if (!(user.role === 'manager' || isAdminRole(user.role))) return []
+  await connectDb()
+  const now = new Date()
+  const one = opts.personId && Types.ObjectId.isValid(opts.personId) ? oid(opts.personId) : null
+  const match: Record<string, unknown>[] = [leadScope(user), { 'assignment.agentId': one ?? { $ne: null } }]
+  const { from, to } = opts.range ?? {}
+  if (from || to) match.push({ receivedAt: { ...(from ? { $gte: from } : {}), ...(to ? { $lt: to } : {}) } })
+  const isOpen = { $eq: ['$status', 'open'] }
+  const count = (cond: unknown) => ({ $sum: { $cond: [cond, 1, 0] } })
+  const [groups, people, duty] = await Promise.all([
+    Lead.aggregate<{ _id: Types.ObjectId; total: number; open: number; waitingAccept: number; notContacted: number; interested: number; won: number; closed: number; overdue: number; lastAssignedAt: Date | null }>([
+      { $match: { $and: match } },
+      {
+        $group: {
+          _id: '$assignment.agentId',
+          total: { $sum: 1 },
+          open: count(isOpen),
+          waitingAccept: count({ $and: [isOpen, { $eq: ['$assignment.state', 'assigned'] }] }),
+          notContacted: count({ $and: [isOpen, { $lte: [{ $ifNull: ['$attemptCount', 0] }, 0] }] }),
+          interested: count({ $and: [isOpen, { $in: ['$stage', INTERESTED_STAGES] }] }),
+          won: count({ $eq: ['$status', 'won'] }),
+          closed: count({ $in: ['$status', ['lost', 'unreachable', 'junk']] }),
+          overdue: count({ $and: [isOpen, { $ne: [{ $ifNull: ['$nextFollowUpAt', null] }, null] }, { $lt: ['$nextFollowUpAt', now] }] }),
+          lastAssignedAt: { $max: '$assignment.assignedAt' },
+        },
+      },
+    ]),
+    User.find({ deletedAt: null, ...(one ? { _id: one } : {}) })
+      .select('name role jobTitle departmentId')
+      .lean(),
+    Attendance.find({ date: pktDateKey(now), status: { $in: ['checked_in', 'on_break'] } }).select('userId').lean(),
+  ])
+  const byId = new Map(groups.map((g) => [String(g._id), g]))
+  const onDuty = new Set(duty.map((d) => String(d.userId)))
+  const myDept = user.departmentId ? String(user.departmentId) : null
+  const workable = (p: { role: string; departmentId?: unknown }) => p.role === 'agent' && (isAdminRole(user.role) || String(p.departmentId ?? '') === myDept)
+  return people
+    .filter((p) => byId.has(String(p._id)) || workable(p))
+    .map((p) => {
+      const g = byId.get(String(p._id))
+      return {
+        id: String(p._id),
+        name: p.name,
+        role: p.role as Role,
+        jobTitle: p.jobTitle ?? null,
+        onDuty: onDuty.has(String(p._id)),
+        total: g?.total ?? 0,
+        open: g?.open ?? 0,
+        waitingAccept: g?.waitingAccept ?? 0,
+        notContacted: g?.notContacted ?? 0,
+        interested: g?.interested ?? 0,
+        won: g?.won ?? 0,
+        closed: g?.closed ?? 0,
+        overdueFollowUps: g?.overdue ?? 0,
+        lastAssignedAt: g?.lastAssignedAt ? new Date(g.lastAssignedAt).toISOString() : null,
+      }
+    })
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
 }
 
 /** Choices for the filter panel: agents the user can see, and form / campaign names of leads in scope. */
