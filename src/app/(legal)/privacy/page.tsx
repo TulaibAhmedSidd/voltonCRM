@@ -87,6 +87,24 @@ export default function PrivacyPage() {
       </ul>
       <p>We may also disclose information when the law requires it, or to protect our rights, our customers or our staff.</p>
 
+      <h3>Requests from public authorities</h3>
+      <p>If a government body, court or other public authority asks us for personal information, we:</p>
+      <ol>
+        <li>
+          <b>Check that the request is lawful</b> — that it comes from an authority with the power to make it, in writing, and under a law that applies to us.
+        </li>
+        <li>
+          <b>Challenge requests we believe are unlawful</b>, too broad or unclear, and share nothing until a valid request is made.
+        </li>
+        <li>
+          <b>Share only the minimum</b> information needed to answer a valid request (data minimisation).
+        </li>
+        <li>
+          <b>Keep a record</b> of every request, our reply, the legal reason and who handled it.
+        </li>
+      </ol>
+      <p>Where the law allows it, we tell the person concerned before sharing their information.</p>
+
       <h2>6. How long we keep it</h2>
       <ul>
         <li>Enquiries that do not become a sale: up to 24 months after our last contact with you.</li>
