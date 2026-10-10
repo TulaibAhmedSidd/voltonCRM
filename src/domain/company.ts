@@ -6,7 +6,7 @@ export const COMPANY = {
   address: 'Suite #6, A-137 Block 5, Gulshan-e-Iqbal, Karachi, Pakistan',
   phone: '+92 303 2115055',
   whatsapp: '+923032115055',
-  email: 'voltonsolar@gmail.com',
+  email: 'voltonsolarenergy@gmail.com',
   website: 'voltonsolar.com',
 } as const
 

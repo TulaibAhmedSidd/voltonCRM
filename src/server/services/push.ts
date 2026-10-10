@@ -14,7 +14,7 @@ function ready(): boolean {
   const pub = process.env.WEB_PUSH_PUBLIC_KEY
   const priv = process.env.WEB_PUSH_PRIVATE_KEY
   configured = !!(pub && priv)
-  if (configured) webpush.setVapidDetails(process.env.WEB_PUSH_SUBJECT || 'mailto:voltonsolar@gmail.com', pub!, priv!)
+  if (configured) webpush.setVapidDetails(process.env.WEB_PUSH_SUBJECT || 'mailto:voltonsolarenergy@gmail.com', pub!, priv!)
   return configured
 }
 
