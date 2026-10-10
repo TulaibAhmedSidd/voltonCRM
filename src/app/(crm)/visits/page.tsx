@@ -31,7 +31,7 @@ export default async function VisitsPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionCard title="Field agents — active kW">
             {fieldAgents.length === 0 ? (
-              <EmptyState title="No field agents" description="Add them in Settings → Users with role Field agent." />
+              <EmptyState title="No field agents" description="Add them in Team → Add a team member, role Field agent." />
             ) : (
               <ul className="divide-y divide-border">
                 {fieldAgents

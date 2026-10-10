@@ -77,15 +77,32 @@ export const hex = (h: string): RGB => {
 const n2 = (n: number) => (Math.round(n * 100) / 100).toString()
 const rgb = (c: RGB) => c.map((v) => n2(v)).join(' ')
 
-interface PdfImage {
+export interface PdfImage {
   width: number
   height: number
-  rgb: Buffer // deflated
+  rgb: Buffer // deflated RGB, or the JPEG file itself when jpeg = true
   alpha: Buffer | null // deflated
+  jpeg?: boolean
+}
+
+/** A JPEG file placed as-is (DCTDecode). Size is read from the JPEG's SOF header. */
+export function jpegImage(data: Buffer): PdfImage {
+  let i = 2
+  while (i < data.length) {
+    if (data[i] !== 0xff) throw new Error('Bad JPEG')
+    const marker = data[i + 1]
+    const len = data.readUInt16BE(i + 2)
+    // SOF0..SOF15 except DHT (C4), JPG (C8), DAC (CC)
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { width: data.readUInt16BE(i + 7), height: data.readUInt16BE(i + 5), rgb: data, alpha: null, jpeg: true }
+    }
+    i += 2 + len
+  }
+  throw new Error('JPEG size not found')
 }
 
 /** Decode an 8-bit RGB / RGBA, non-interlaced PNG into deflated RGB + alpha planes for the PDF. */
-export function decodePng(png: Buffer): PdfImage {
+export function decodePng(png: Buffer, recolor?: (r: number, g: number, b: number) => [number, number, number]): PdfImage {
   if (png.readUInt32BE(0) !== 0x89504e47) throw new Error('Not a PNG')
   let i = 8
   let width = 0
@@ -136,9 +153,10 @@ export function decodePng(png: Buffer): PdfImage {
   const rgbBuf = Buffer.alloc(width * height * 3)
   const alphaBuf = channels === 4 ? Buffer.alloc(width * height) : null
   for (let p = 0; p < width * height; p++) {
-    rgbBuf[p * 3] = pixels[p * channels]
-    rgbBuf[p * 3 + 1] = pixels[p * channels + 1]
-    rgbBuf[p * 3 + 2] = pixels[p * channels + 2]
+    const [r, g, b] = recolor ? recolor(pixels[p * channels], pixels[p * channels + 1], pixels[p * channels + 2]) : [pixels[p * channels], pixels[p * channels + 1], pixels[p * channels + 2]]
+    rgbBuf[p * 3] = r
+    rgbBuf[p * 3 + 1] = g
+    rgbBuf[p * 3 + 2] = b
     if (alphaBuf) alphaBuf[p] = pixels[p * channels + 3]
   }
   return { width, height, rgb: deflateSync(rgbBuf), alpha: alphaBuf ? deflateSync(alphaBuf) : null }
@@ -222,7 +240,7 @@ export class PdfDocument {
     const imageIds: [string, number][] = []
     for (const [name, img] of this.images) {
       const smask = img.alpha ? add(stream(`/Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode`, img.alpha)) : null
-      imageIds.push([name, add(stream(`/Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode${smask ? ` /SMask ${smask} 0 R` : ''}`, img.rgb))])
+      imageIds.push([name, add(stream(`/Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /${img.jpeg ? 'DCTDecode' : 'FlateDecode'}${smask ? ` /SMask ${smask} 0 R` : ''}`, img.rgb))])
     }
     const resources = `<< /Font << ${fontIds.map(([k, id]) => `/${k} ${id} 0 R`).join(' ')} >> /XObject << ${imageIds.map(([k, id]) => `/${k} ${id} 0 R`).join(' ')} >> >>`
     const pageIds = this.pages.map((ops) => {

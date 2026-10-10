@@ -35,7 +35,7 @@ import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
 import { createQuotation, getQuotationFor } from '@/server/services/quotations'
 import { eraseCustomer } from '@/server/services/erasure'
 import { createInstruction, createJobRole, deleteJobRole, resolveJobRole, updateInstruction } from '@/server/services/work'
-import { buildQuotationPdf } from '@/server/services/quotation-pdf'
+import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
 import { quotationInput, formatRs } from '@/domain/quotation'
 import { removePushSubscription, savePushSubscription, sendPush } from '@/server/services/push'
 import { isHexColor, THEME_PRESETS } from '@/styles/runtime-theme'
@@ -914,7 +914,7 @@ export async function sendQuotationWhatsAppAction(quotationId: string): Promise<
     const q = typeof quotationId === 'string' ? await getQuotationFor(user, quotationId) : null
     if (!q) return { ok: false, message: 'Quotation not found' }
     const input = quotationInput.parse(q.input)
-    const data = buildQuotationPdf({ quotationNo: q.quotationNo, leadNo: q.leadNo, issuedAt: q.issuedAt, validUntil: q.validUntil, customer: q.customer, preparedBy: q.preparedBy, input })
+    const data = await buildQuotationPdf({ quotationNo: q.quotationNo, leadNo: q.leadNo, issuedAt: q.issuedAt, validUntil: q.validUntil, customer: q.customer, preparedBy: q.preparedBy, input }, templateOf(q.input))
     const filename = `Volton-Quotation-${q.quotationNo}.pdf`
     const caption = `Assalam o Alaikum ${q.customer.name}, here is your Volton Solar quotation ${q.quotationNo} (Rs ${formatRs(q.total)}). — ${q.preparedBy.name}`
     await sendWhatsAppDocument(String(q.leadId), { data, filename, caption }, user)

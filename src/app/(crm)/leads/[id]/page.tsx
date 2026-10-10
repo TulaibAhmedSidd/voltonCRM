@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { CalendarClock, FileText, Flag, History, MapPin, MessageCircle, Route, Settings2, ShieldCheck } from 'lucide-react'
+import { LeadPanels } from '@/components/crm/lead-panels'
 import { ActionForm } from '@/components/common/action-form'
 import { SubmitButton } from '@/components/common/submit-button'
 import { CheckboxField, SelectField, TextAreaField, TextField } from '@/components/common/fields'
@@ -50,8 +51,6 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const user = await requireUser()
   const { id } = await props.params
   const sp = await props.searchParams
-  const TABS = ['timeline', 'quotation', 'proof', 'whatsapp', 'followups', 'site'] as const
-  const tab = TABS.find((t) => t === sp.tab) ?? 'timeline'
   const data = await getLeadDetail(id, user)
   if (!data) notFound()
   const { lead, raw, attempts, followUps, activities, messages, visits } = data
@@ -60,6 +59,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const agents = manager ? (await getTeamBoard(user)).filter((m) => m.role === 'agent') : []
   const site = raw.site as Record<string, string | number | boolean | undefined>
   const [quotations, lastQuote] = await Promise.all([listQuotations(user, lead.id), lastQuotationInput(user, lead.id)])
+  const canStage = manager || (mine && lead.status === 'open' && lead.assignmentState === 'accepted')
   const canQuote = user.role !== 'field_agent' && lead.status === 'open' && (manager || (mine && lead.assignmentState === 'accepted'))
   // Steps + "what to do now" (src/domain/lead-journey.ts)
   const ordered = [...attempts].reverse()
@@ -109,39 +109,78 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
         </SectionCard>
       ) : null}
 
-      {user.role !== 'field_agent' ? (
-        <SectionCard
-          title="Quotation"
-          description={quotations.length ? `Latest: ${quotations[0].quotationNo} · Rs ${quotations[0].total.toLocaleString('en-US')} · by ${quotations[0].preparedBy}` : 'Make a priced quotation PDF with the Volton logo, signed with your name, and send it to the customer.'}
-          actions={
-            <Button asChild size="touch">
-              <Link href={`/leads/${lead.id}?tab=quotation#lead-tabs`}>{quotations.length ? 'Quotations / new' : 'Make quotation'}</Link>
-            </Button>
-          }
-        >
-          {!canQuote ? <p className="text-sm text-muted-foreground">{lead.status !== 'open' ? 'This lead is closed — earlier quotations can still be opened.' : 'Accept the lead first, then you can make a quotation.'}</p> : null}
-        </SectionCard>
-      ) : null}
+
+
+
 
       {user.role !== 'field_agent' ? (
-        <section aria-label="Lead progress" className="space-y-3">
-          <LeadJourney steps={journey.steps} />
-          <details className="rounded-xl px-4 ring-1 ring-foreground/10">
-            <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">How a lead works (steps)</summary>
-            <ol className="list-decimal space-y-1 ps-5 pb-3 text-sm text-muted-foreground">
-              <li>The lead arrives (Google Sheet / WhatsApp / added by hand) and goes to the next checked-in agent, or the manager assigns it.</li>
-              <li>The agent taps <b>Accept</b> within {raw.acceptWithinMin} minutes — then the customer&apos;s number appears.</li>
-              <li><b>Try 1</b>: tap WhatsApp, WA call or Call. Coming back to the app opens “What happened?” — save the result every time.</li>
-              <li>No answer → <b>Try 2</b> the next day, then <b>Try 3</b> 3 days later (reminders come automatically, in office hours).</li>
-              <li>Close the lead: <b>Deal done</b> (with the value) or <b>Not interested</b>. Three no-answers on different days → <b>Dead</b>.</li>
-              <li>The manager checks every close in <b>Proof review</b>: OK keeps it, Dispute re-opens it for another agent. Sales count after OK.</li>
-            </ol>
-          </details>
-        </section>
-      ) : null}
-
-      {manager ? (
-        <SectionCard title="Manage">
+        <LeadPanels
+          initial={typeof sp.panel === 'string' ? sp.panel : typeof sp.tab === 'string' ? sp.tab : null}
+          panels={[
+            {
+              key: 'quotation',
+              title: 'Quotation',
+              description: 'Make a priced PDF with the Volton logo and send it to the customer.',
+              icon: <FileText />,
+              badge: quotations.length ? `${quotations.length} made · latest ${quotations[0].quotationNo}` : canQuote ? 'Make one' : undefined,
+              content: <>
+          <QuotationBuilder
+            leadId={lead.id}
+            initial={lastQuote ?? defaultQuotation(typeof site.targetKw === 'number' ? site.targetKw : null)}
+            quotations={quotations}
+            canCreate={canQuote}
+            customer={{ name: lead.name, phone: lead.phone }}
+          />
+        </>,
+            },
+            ...(canStage
+              ? [
+                  {
+                    key: 'stage',
+                    title: 'Stage',
+                    description: 'Move the lead to the right stage.',
+                    icon: <Flag />,
+                    badge: STAGE_META[lead.stage].label,
+                    content: <>{manager ? (
+        <div>
+          <ActionForm action={changeStageAction}>
+            <div className="grid gap-3 md:grid-cols-4 md:items-end">
+              <input type="hidden" name="leadId" value={lead.id} />
+              <SelectField label="Stage" name="stage" defaultValue={lead.stage} options={PIPELINES[lead.department].map((s) => ({ value: s, label: STAGE_META[s].label }))} />
+              <SelectField label="If lost — why" name="lostReason" placeholder="—" options={optionsFor(LOST_REASONS, en.lostReason)} />
+              <TextField label="If won — value (PKR)" name="wonValuePkr" type="number" min={0} inputMode="numeric" />
+              <Button type="submit" variant="secondary" size="touch">
+                Update stage
+              </Button>
+            </div>
+          </ActionForm>
+        </div>
+      ) : mine && lead.status === 'open' && lead.assignmentState === 'accepted' ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">For a sale (WON) or “not interested”, save it from the call result — your manager checks it.</p>
+          <ActionForm action={changeStageAction}>
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <input type="hidden" name="leadId" value={lead.id} />
+              <SelectField label="Stage" name="stage" defaultValue={AGENT_STAGES.find((s) => s === lead.stage) ?? AGENT_STAGES[0]} options={AGENT_STAGES.map((s) => ({ value: s, label: STAGE_META[s].label }))} />
+              <Button type="submit" variant="secondary" size="touch">
+                Update stage
+              </Button>
+            </div>
+          </ActionForm>
+        </div>
+      ) : null}</>,
+                  },
+                ]
+              : []),
+            ...(manager
+              ? [
+                  {
+                    key: 'manage',
+                    title: 'Manage',
+                    description: 'Assign, move department, ping, delete or erase.',
+                    icon: <Settings2 />,
+                    badge: lead.agent ? lead.agent.name : 'Not assigned',
+                    content: <>
           <div className="grid gap-4 md:grid-cols-3">
             <ActionForm action={assignLeadAction} className="space-y-2">
               <input type="hidden" name="leadId" value={lead.id} />
@@ -208,49 +247,18 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               </ActionForm>
             ) : null}
           </div>
-        </SectionCard>
-      ) : null}
-
-      {manager ? (
-        <SectionCard title="Stage">
-          <ActionForm action={changeStageAction}>
-            <div className="grid gap-3 md:grid-cols-4 md:items-end">
-              <input type="hidden" name="leadId" value={lead.id} />
-              <SelectField label="Stage" name="stage" defaultValue={lead.stage} options={PIPELINES[lead.department].map((s) => ({ value: s, label: STAGE_META[s].label }))} />
-              <SelectField label="If lost — why" name="lostReason" placeholder="—" options={optionsFor(LOST_REASONS, en.lostReason)} />
-              <TextField label="If won — value (PKR)" name="wonValuePkr" type="number" min={0} inputMode="numeric" />
-              <Button type="submit" variant="secondary" size="touch">
-                Update stage
-              </Button>
-            </div>
-          </ActionForm>
-        </SectionCard>
-      ) : mine && lead.status === 'open' && lead.assignmentState === 'accepted' ? (
-        <SectionCard title="Stage" description="For a sale (WON) or 'not interested', save it from the call result — your manager checks it.">
-          <ActionForm action={changeStageAction}>
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-              <input type="hidden" name="leadId" value={lead.id} />
-              <SelectField label="Stage" name="stage" defaultValue={AGENT_STAGES.find((s) => s === lead.stage) ?? AGENT_STAGES[0]} options={AGENT_STAGES.map((s) => ({ value: s, label: STAGE_META[s].label }))} />
-              <Button type="submit" variant="secondary" size="touch">
-                Update stage
-              </Button>
-            </div>
-          </ActionForm>
-        </SectionCard>
-      ) : null}
-
-      <Tabs key={tab} defaultValue={tab} id="lead-tabs" className="scroll-mt-20">
-        <TabsList className="w-full overflow-x-auto">
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          <TabsTrigger value="quotation">Quotation{quotations.length ? ` (${quotations.length})` : ''}</TabsTrigger>
-          <TabsTrigger value="proof">Proof ({attempts.length})</TabsTrigger>
-          <TabsTrigger value="whatsapp">WhatsApp ({messages.length})</TabsTrigger>
-          <TabsTrigger value="followups">Follow-ups</TabsTrigger>
-          <TabsTrigger value="site">Site & visit</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="timeline" className="space-y-4 pt-4">
-          {user.role !== 'field_agent' ? (
+</>,
+                  },
+                ]
+              : []),
+            {
+              key: 'timeline',
+              title: 'Timeline & notes',
+              description: 'Everything that happened on this lead; add a note.',
+              icon: <History />,
+              badge: `${activities.length} events`,
+              content: <div className="space-y-4">
+          {(
             <form action={addNoteAction} className="flex gap-2">
               <input type="hidden" name="leadId" value={lead.id} />
               <input name="text" required maxLength={2000} aria-label="Add a note" placeholder="Add a note…" className="h-11 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 text-base outline-none md:text-sm" />
@@ -258,7 +266,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
                 Add
               </SubmitButton>
             </form>
-          ) : null}
+          )}
           {activities.length === 0 ? (
             <EmptyState />
           ) : (
@@ -275,21 +283,45 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
             </Timeline>
           )}
 
-        </TabsContent>
-
-        <TabsContent value="proof" className="grid gap-3 pt-4 md:grid-cols-2">
+        </div>,
+            },
+            {
+              key: 'proof',
+              title: 'Proof',
+              description: 'Every call / WhatsApp try with its result and screenshot.',
+              icon: <ShieldCheck />,
+              badge: `${attempts.length} tries`,
+              content: <div className="grid gap-3 md:grid-cols-2">
           {attempts.length === 0 ? <EmptyState title="No contact attempts yet" /> : attempts.map((a) => <AttemptCard key={a.id} attempt={a} />)}
-        </TabsContent>
-
-        <TabsContent value="whatsapp" className="pt-4">
+        </div>,
+            },
+            {
+              key: 'whatsapp',
+              title: 'WhatsApp chat',
+              description: 'The real chat with the customer; reply from here.',
+              icon: <MessageCircle />,
+              badge: `${messages.length} messages`,
+              content: <>
           <ChatPanel leadId={lead.id} messages={messages} />
-        </TabsContent>
-
-        <TabsContent value="followups" className="pt-4">
+        </>,
+            },
+            {
+              key: 'followups',
+              title: 'Follow-ups',
+              description: 'Reminders planned for this lead.',
+              icon: <CalendarClock />,
+              badge: followUps.length ? `${followUps.length}` : 'None',
+              content: <>
           {followUps.length === 0 ? <EmptyState title="No follow-ups" /> : followUps.map((f) => <FollowUpItem key={f.id} followUp={f} />)}
-        </TabsContent>
-
-        <TabsContent value="site" className="grid gap-4 pt-4 lg:grid-cols-2">
+        </>,
+            },
+            {
+              key: 'site',
+              title: 'Site & visit',
+              description: 'Roof, bill and system size; book a site visit.',
+              icon: <MapPin />,
+              badge: visits.length ? `${visits.length} visit(s)` : undefined,
+              content: <div className="grid gap-4 lg:grid-cols-2">
           <SectionCard title="Site details" description={formAnswers.length ? `Meta form: ${formAnswers.join(' · ')}` : undefined}>
             <ActionForm action={saveSiteAction}>
               <input type="hidden" name="leadId" value={lead.id} />
@@ -335,17 +367,32 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               </ActionForm>
             ) : null}
           </SectionCard>
-        </TabsContent>
-        <TabsContent value="quotation" className="pt-4">
-          <QuotationBuilder
-            leadId={lead.id}
-            initial={lastQuote ?? defaultQuotation(typeof site.targetKw === 'number' ? site.targetKw : null)}
-            quotations={quotations}
-            canCreate={canQuote}
-            customer={{ name: lead.name, phone: lead.phone }}
-          />
-        </TabsContent>
-      </Tabs>
+        </div>,
+            },
+            {
+              key: 'steps',
+              title: 'Lead steps',
+              description: 'Where this lead is in the process, and how a lead works.',
+              icon: <Route />,
+              content: <div className="space-y-3">
+          <LeadJourney steps={journey.steps} />
+          <details className="rounded-xl px-4 ring-1 ring-foreground/10">
+            <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium">How a lead works (steps)</summary>
+            <ol className="list-decimal space-y-1 ps-5 pb-3 text-sm text-muted-foreground">
+              <li>The lead arrives (Google Sheet / WhatsApp / added by hand) and goes to the next checked-in agent, or the manager assigns it.</li>
+              <li>The agent taps <b>Accept</b> within {raw.acceptWithinMin} minutes — then the customer&apos;s number appears.</li>
+              <li><b>Try 1</b>: tap WhatsApp, WA call or Call. Coming back to the app opens “What happened?” — save the result every time.</li>
+              <li>No answer → <b>Try 2</b> the next day, then <b>Try 3</b> 3 days later (reminders come automatically, in office hours).</li>
+              <li>Close the lead: <b>Deal done</b> (with the value) or <b>Not interested</b>. Three no-answers on different days → <b>Dead</b>.</li>
+              <li>The manager checks every close in <b>Proof review</b>: OK keeps it, Dispute re-opens it for another agent. Sales count after OK.</li>
+            </ol>
+          </details>
+</div>,
+            },
+          ]}
+        />
+      ) : null}
+
       {data.otherLeads.length ? (
         <p className="text-sm text-muted-foreground">
           Same customer:{' '}

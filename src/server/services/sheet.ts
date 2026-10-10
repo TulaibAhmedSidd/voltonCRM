@@ -254,7 +254,7 @@ async function recordProblem(source: SheetSource, tab: string, key: string, prev
     type: 'sheet_problem',
     title: `Google Sheet "${source.name}" (${tab}) stopped`,
     body: problem.slice(0, 160),
-    link: '/settings#google-sheets',
+    link: '/settings?section=google-sheets',
     dedupeKey: `sheet_problem:${key}:${day}:${problem.slice(0, 40)}`,
   })
 }

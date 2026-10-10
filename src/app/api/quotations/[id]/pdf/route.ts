@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { quotationInput } from '@/domain/quotation'
 import { getSessionUser } from '@/server/auth/session'
-import { buildQuotationPdf } from '@/server/services/quotation-pdf'
+import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
 import { getQuotationFor } from '@/server/services/quotations'
 
 /** The quotation PDF, rebuilt from the saved snapshot. ?download=1 saves the file; otherwise it opens in the browser. */
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
   const q = await getQuotationFor(user, id)
   if (!q) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const input = quotationInput.parse(q.input)
-  const pdf = buildQuotationPdf({ quotationNo: q.quotationNo, leadNo: q.leadNo, issuedAt: q.issuedAt, validUntil: q.validUntil, customer: q.customer, preparedBy: q.preparedBy, input })
+  const pdf = await buildQuotationPdf({ quotationNo: q.quotationNo, leadNo: q.leadNo, issuedAt: q.issuedAt, validUntil: q.validUntil, customer: q.customer, preparedBy: q.preparedBy, input }, templateOf(q.input, request.nextUrl.searchParams.get('template')))
   const safeName = q.customer.name.replace(/[^A-Za-z0-9 ]/g, '').trim().replace(/\s+/g, '-').slice(0, 40) || 'customer'
   const disposition = request.nextUrl.searchParams.get('download') ? 'attachment' : 'inline'
   return new NextResponse(new Uint8Array(pdf), {

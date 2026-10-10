@@ -1,8 +1,10 @@
-import { ArrowDown, ArrowUp } from 'lucide-react'
+import { ArrowDown, ArrowUp, BadgeCheck, ListOrdered, UserCheck, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
 import { CheckboxField, TextField } from '@/components/common/fields'
 import { PageHeader } from '@/components/common/page-header'
+import { SectionBack, SectionHub } from '@/components/common/section-hub'
+import { HashToSection } from '@/components/common/hash-to-section'
 import { SectionCard } from '@/components/common/section-card'
 import { EmptyState } from '@/components/common/states'
 import { StatusBadge } from '@/components/common/status-badge'
@@ -17,16 +19,47 @@ import { ROLE_META } from '@/domain/ui-maps'
 
 export const metadata = { title: 'Team' }
 
-export default async function TeamPage() {
+const SECTIONS = [
+  { key: 'working', title: 'Who is working now', description: 'Who is checked in, their open leads; ping someone or give their leads to others.', icon: Users },
+  { key: 'members', title: 'Who gets leads', description: 'Turn “Gets leads automatically” on or off for each employee.', icon: UserCheck },
+  { key: 'order', title: 'Lead order & timings', description: 'The turn order for new leads, accept / call time limits, pause auto-assign.', icon: ListOrdered },
+  { key: 'add', title: 'Add a team member', description: 'Add people with a built-in or custom role; see and manage everyone.', icon: UserPlus },
+  { key: 'roles', title: 'Roles', description: 'Make your own roles: do they get leads? do they get work instructions?', icon: BadgeCheck },
+] as const
+
+/** Team: a card per section; tapping a card opens only that section (?section=…), with a way back. */
+export default async function TeamPage(props: PageProps<'/team'>) {
   const user = await requireRole('admin', 'manager')
+  const sp = await props.searchParams
+  const open = SECTIONS.find((x) => x.key === sp.section)
   const [teams, board, people] = await Promise.all([getTeams(user), getTeamBoard(user), listUsers(user)])
   const inOrder = new Set(teams.flatMap((t) => t.members.map((m: { id: string }) => m.id)))
   const employees = people.filter((p) => (p.role === 'agent' || p.role === 'field_agent' || p.role === 'staff') && p.isActive)
   const now = new Date()
   const callAgents = board.filter((m) => m.role === 'agent')
+
+  if (!open) {
+    const checkedIn = board.filter((m) => m.attendance === 'checked_in').length
+    const badges: Record<string, { badge: string; badgeTone: 'ok' | 'warn' | 'plain' }> = {
+      working: { badge: `${checkedIn} of ${board.length} checked in`, badgeTone: checkedIn ? 'ok' : 'warn' },
+      members: { badge: `${employees.filter((e) => inOrder.has(e.id)).length} get leads`, badgeTone: 'plain' },
+      order: teams.some((t) => t.settings.paused) ? { badge: 'Auto-assign paused', badgeTone: 'warn' } : { badge: 'Auto-assign on', badgeTone: 'ok' },
+      add: { badge: `${people.filter((p) => p.isActive).length} people`, badgeTone: 'plain' },
+    }
+    return (
+      <>
+        <PageHeader title="Team" description="Pick what you want to see or change." />
+        <HashToSection keys={SECTIONS.map((x) => x.key)} />
+        <SectionHub label="Team sections" items={SECTIONS.map((x) => ({ key: x.key, title: x.title, description: x.description, icon: x.icon, href: `/team?section=${x.key}`, ...badges[x.key] }))} />
+      </>
+    )
+  }
+
   return (
     <>
-      <PageHeader title="Team" description="People, who gets leads automatically, the assignment order, timings and who is working now." />
+      <SectionBack href="/team" backLabel="All team" title={open.title} description={open.description} icon={open.icon} />
+      {open.key === 'members' ? (
+        <>
       <section id="members" className="scroll-mt-20">
         <SectionCard title={`Team members (${employees.length})`} description="Turn “Gets leads automatically” on or off for anyone. On = they get new leads in turn when checked in.">
           {employees.length === 0 ? <EmptyState title="No employees yet" description="Add people below." /> : (
@@ -58,7 +91,11 @@ export default async function TeamPage() {
           )}
         </SectionCard>
       </section>
-      {teams.length === 0 ? <EmptyState title="No team yet" description="Create a manager in Settings → Users — their team is created automatically." /> : null}
+        </>
+      ) : null}
+      {open.key === 'order' ? (
+        <>
+      {teams.length === 0 ? <EmptyState title="No team yet" description="Create a manager in Team → Add a team member — their team is created automatically." /> : null}
       {teams.map((team) => (
         <div key={team.id} className="grid gap-4 lg:grid-cols-2">
           <SectionCard title={`${team.name}`} description={`${DEPARTMENT_META[team.department]?.label ?? ''} · manager ${team.manager}`} actions={team.settings.paused ? <StatusBadge label="Auto-assign paused" tone="warning" size="sm" /> : null}>
@@ -129,6 +166,10 @@ export default async function TeamPage() {
           </SectionCard>
         </div>
       ))}
+        </>
+      ) : null}
+      {open.key === 'working' ? (
+        <>
       <SectionCard title="Who is working now">
         {board.length === 0 ? (
           <EmptyState title="No agents" />
@@ -151,8 +192,10 @@ export default async function TeamPage() {
           ))
         )}
       </SectionCard>
-      <UsersSection user={user} />
-      <RolesSection user={user} />
+        </>
+      ) : null}
+      {open.key === 'add' ? <UsersSection user={user} /> : null}
+      {open.key === 'roles' ? <RolesSection user={user} /> : null}
     </>
   )
 }

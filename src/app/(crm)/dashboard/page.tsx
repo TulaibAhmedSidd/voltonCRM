@@ -162,7 +162,7 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard title={`Team now — ${checkedIn} checked in`} actions={<Button asChild variant="outline" size="touch"><Link href="/team">Team</Link></Button>}>
-          {board.length === 0 ? <EmptyState title="No agents yet" description="Add agents in Settings → Users." /> : board.map((m) => <TeamMemberRow key={m.id} member={m} now={now} />)}
+          {board.length === 0 ? <EmptyState title="No agents yet" description="Add agents in Team → Add a team member." /> : board.map((m) => <TeamMemberRow key={m.id} member={m} now={now} />)}
         </SectionCard>
         <SectionCard title={`Waiting for assignment (${queue.total})`} actions={<Button asChild variant="outline" size="touch"><Link href="/leads?view=unassigned">Open</Link></Button>}>
           <QueuePanel teams={queuePanels} />

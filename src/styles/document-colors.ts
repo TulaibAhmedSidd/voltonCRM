@@ -7,4 +7,9 @@ export const DOCUMENT_COLORS = {
   text: '#1f2937',
   row: '#f5f6f8',
   border: '#d9dde3',
+  /** Volton classic quotation (their Excel look) */
+  classicRow: '#ddebf7',
+  classicBox: '#bdd7ee',
+  classicLine: '#1f1f1f',
+  classicPage: '#f2f2f2',
 } as const

@@ -7,6 +7,8 @@ export const COMPANY = {
   phone: '+92 303 2115055',
   whatsapp: '+923032115055',
   email: 'voltonsolarenergy@gmail.com',
+  /** Shown on quotations sent to customers. */
+  quoteEmail: 'info@voltonsolar.com',
   website: 'voltonsolar.com',
 } as const
 

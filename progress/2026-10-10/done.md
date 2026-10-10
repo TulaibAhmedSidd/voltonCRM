@@ -31,3 +31,16 @@
 - Views: For me · I gave · Whole team (managers), status filters, late due dates in red.
 - Each new instruction and each update notifies the other side (in-app pop-up + phone / PC push).
 - Tests: tests/db/work.test.ts.
+
+## Check-out fix, cards for Settings / Team / lead page, Volton classic quotation
+- **Check out asks to confirm** ("Check out now?" → "Yes, check out"). Ifran Ahmed was checked out 13 s after checking in: a double-tap landed on "Check out", which takes the place of "Check in".
+- **Settings** is now a grid of cards (icon, title, one line, live badge); a card opens only its section (`?section=`) with "← All settings". Old `/settings#…` links still work.
+- **Team** works the same way: Who is working now · Who gets leads · Lead order & timings · Add a team member · Roles.
+- **Lead page:** the header, "What to do now" and "Contact the customer" stay on top (the WhatsApp return prompt needs them on the page). Everything else is a card that slides a panel up from the bottom: Quotation · Stage · Manage · Timeline & notes · Proof · WhatsApp chat · Follow-ups · Site & visit · Lead steps. `?panel=` (and the old `?tab=`) opens one directly.
+- **Quotation templates:**
+  - **Volton classic** (default) = Volton's own PDF: their cover and services/clients pages (original images), the quotation table in their Excel layout (light blue rows, "Job" for lump items, TOTAL, warranty table, Sales Representative box), their acknowledgement page, and their contact page with the email changed to info@voltonsolar.com.
+  - **Modern** = the CRM design.
+  - Chosen per quotation. Quotations saved before this keep the modern look; `?template=` overrides.
+- New warranty fields: solar panel / structure / inverter texts with Volton's wording as defaults.
+- Quotations show **info@voltonsolar.com** (`COMPANY.quoteEmail`).
+- PDF writer: JPEG pages (DCTDecode) and a dark logo variant. The page images (`src/server/assets/quote-pages.ts`) load only for the classic template.

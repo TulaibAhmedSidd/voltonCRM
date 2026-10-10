@@ -7,6 +7,15 @@ import { z } from 'zod'
 
 export { COMPANY } from '@/domain/company'
 
+/** classic = Volton's own quotation (cover, services, table, acknowledgement, contact); modern = the CRM design. */
+export const QUOTE_TEMPLATES = ['classic', 'modern'] as const
+export type QuoteTemplate = (typeof QUOTE_TEMPLATES)[number]
+export const QUOTE_TEMPLATE_LABEL: Record<QuoteTemplate, string> = { classic: 'Volton classic', modern: 'Modern' }
+export const QUOTE_TEMPLATE_HINT: Record<QuoteTemplate, string> = {
+  classic: 'Your usual Volton PDF: cover, services & clients, quotation table, acknowledgement, contact page.',
+  modern: 'One–two page branded quotation with system summary, terms and signature.',
+}
+
 export const QUOTE_SYSTEM_TYPES = ['on_grid', 'hybrid', 'off_grid'] as const
 export type QuoteSystemType = (typeof QUOTE_SYSTEM_TYPES)[number]
 export const QUOTE_SYSTEM_LABEL: Record<QuoteSystemType, string> = { on_grid: 'On-Grid', hybrid: 'Hybrid', off_grid: 'Off-Grid' }
@@ -68,6 +77,7 @@ const text = (max: number) => z.string().trim().max(max).optional().default('')
 export const extraItemInput = z.object({ description: text(160), qty, unitPrice: money })
 
 export const quotationInput = z.object({
+  template: z.enum(QUOTE_TEMPLATES).default('classic'),
   systemType: z.enum(QUOTE_SYSTEM_TYPES),
   systemKw: z.coerce.number().min(0).max(10_000),
   panelModel: text(120),
@@ -94,9 +104,11 @@ export const quotationInput = z.object({
   labourPrice: money,
   extras: z.array(extraItemInput).max(8),
   discount: money,
-  panelWarrantyYears: z.coerce.number().min(0).max(40),
-  inverterWarranty: text(80),
-  batteryWarranty: text(80),
+  panelWarrantyYears: z.coerce.number().min(0).max(40).default(12),
+  panelWarrantyText: text(160),
+  structureWarranty: text(160),
+  inverterWarranty: text(160),
+  batteryWarranty: text(160),
   serviceYears: z.coerce.number().min(0).max(20),
   validityDays: z.coerce.number().int().min(1).max(90),
   installationDays: text(60),
@@ -107,6 +119,7 @@ export type QuotationInput = z.infer<typeof quotationInput>
 
 export function defaultQuotation(targetKw?: number | null): QuotationInput {
   return {
+    template: 'classic',
     systemType: 'hybrid',
     systemKw: targetKw ?? 0,
     panelModel: PANEL_SUGGESTIONS[0],
@@ -134,7 +147,9 @@ export function defaultQuotation(targetKw?: number | null): QuotationInput {
     extras: [],
     discount: 0,
     panelWarrantyYears: 12,
-    inverterWarranty: 'Company warranty',
+    panelWarrantyText: "25 Years Manufacturer's Product Warranty & 12 Years Performance Warranty",
+    structureWarranty: '10 Years Warranty Subject to annual Paint Job',
+    inverterWarranty: "05 Years Manufacturer's Service Warranty",
     batteryWarranty: 'Company warranty',
     serviceYears: 2,
     validityDays: 7,
@@ -145,6 +160,8 @@ export function defaultQuotation(targetKw?: number | null): QuotationInput {
 }
 
 export interface QuoteLine {
+  /** Charged as one job (structure, wiring, labour…) — the classic PDF shows "Job" as the quantity. */
+  lump: boolean
   item: string
   description: string
   qty: number
@@ -159,11 +176,11 @@ export function quotationLines(q: QuotationInput): { lines: QuoteLine[]; subtota
   const lines: QuoteLine[] = []
   const add = (item: string, description: string, qty: number, unitPrice: number) => {
     if (!qty && !unitPrice && !description) return
-    lines.push({ item, description, qty, unitPrice, amount: round(qty * unitPrice) })
+    lines.push({ lump: false, item, description, qty, unitPrice, amount: round(qty * unitPrice) })
   }
   const lump = (item: string, description: string, price: number) => {
     if (!price && !description) return
-    lines.push({ item, description, qty: 1, unitPrice: price, amount: round(price) })
+    lines.push({ lump: true, item, description, qty: 1, unitPrice: price, amount: round(price) })
   }
   const panelKwp = Math.round(((q.panelWatt || 0) * (q.panelQty || 0)) / 10) / 100
   const wattInModel = q.panelWatt && q.panelModel.replace(/s/g, '').toLowerCase().includes(`${q.panelWatt}w`)

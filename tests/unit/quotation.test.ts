@@ -1,6 +1,7 @@
+import { inflateSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { defaultQuotation, quotationInput, quotationLines, rupeesInWords } from '@/domain/quotation'
-import { buildQuotationPdf } from '@/server/services/quotation-pdf'
+import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
 import { decodePng, textWidth, wrap } from '@/server/lib/pdf'
 import { VOLTON_LOGO_PNG_BASE64 } from '@/server/lib/brand-logo'
 
@@ -45,8 +46,8 @@ describe('PDF writer', () => {
     expect(textWidth('Volton', 'regular', 10)).toBeGreaterThan(25)
     expect(wrap('one two three four five six', 'regular', 10, 50).length).toBeGreaterThan(1)
   })
-  it('builds a valid multi-page PDF with a correct cross-reference table', () => {
-    const pdf = buildQuotationPdf({
+  it('builds a valid multi-page PDF with a correct cross-reference table', async () => {
+    const pdf = await buildQuotationPdf({
       quotationNo: 'VO-1001',
       leadNo: 'VL-00001',
       issuedAt: new Date('2026-10-09T08:00:00Z'),
@@ -72,3 +73,47 @@ describe('PDF writer', () => {
     expect(s).toContain('/SMask')
   })
 })
+
+describe('Volton classic template', () => {
+  const data = () => ({
+    quotationNo: 'VO-1002',
+    leadNo: 'VL-00002',
+    issuedAt: new Date('2026-10-10T08:00:00Z'),
+    validUntil: new Date('2026-10-17T08:00:00Z'),
+    customer: { name: 'Mr Yawar', phone: '+923001234567', address: 'Defence Phase 2, Karachi' },
+    preparedBy: { name: 'Hayat ul Hassan', role: 'Sales Consultant', phone: '+923134801568' },
+    input: sample(),
+  })
+  const hexOf = (text: string) => Buffer.from(text, 'latin1').toString('hex')
+  /** All page drawing commands (page streams are compressed). */
+  const pageText = (pdf: Buffer) => {
+    const raw = pdf.toString('latin1')
+    const out: string[] = []
+    for (const m of raw.matchAll(/stream\n([\s\S]*?)\nendstream/g)) {
+      try {
+        out.push(inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1'))
+      } catch {
+        // JPEG pages are not compressed streams
+      }
+    }
+    return out.join('\n')
+  }
+
+  it("is Volton's own 5-page set: cover, services, quotation table, acknowledgement, contact (with info@voltonsolar.com)", async () => {
+    const pdf = await buildQuotationPdf(data(), 'classic')
+    const s = pdf.toString('latin1')
+    const drawn = pageText(pdf)
+    expect(Number(/\/Count (\d+)/.exec(s)?.[1])).toBe(5)
+    expect((s.match(/\/Filter \/DCTDecode/g) ?? []).length).toBe(4) // the 4 original pages
+    expect(drawn).toContain(hexOf('info@voltonsolar.com'))
+    expect(drawn).toContain(hexOf('Sales Representative : Hayat ul Hassan'))
+  })
+
+  it('new quotations default to classic; ones saved before templates keep the modern look; ?template= overrides', () => {
+    expect(defaultQuotation().template).toBe('classic')
+    expect(templateOf({ systemType: 'hybrid' })).toBe('modern')
+    expect(templateOf({ template: 'classic' })).toBe('classic')
+    expect(templateOf({ template: 'classic' }, 'modern')).toBe('modern')
+  })
+})
+

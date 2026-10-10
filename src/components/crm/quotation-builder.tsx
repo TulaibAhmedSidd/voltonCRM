@@ -9,6 +9,9 @@ import {
   PANEL_SUGGESTIONS,
   QUOTE_SYSTEM_LABEL,
   QUOTE_SYSTEM_TYPES,
+  QUOTE_TEMPLATE_HINT,
+  QUOTE_TEMPLATE_LABEL,
+  QUOTE_TEMPLATES,
   STRUCTURE_LABEL,
   STRUCTURE_TYPES,
   formatRs,
@@ -181,6 +184,21 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
           <datalist id="q-inverters">{INVERTER_SUGGESTIONS.map((s) => <option key={s} value={s} />)}</datalist>
           <datalist id="q-batteries">{BATTERY_SUGGESTIONS.map((s) => <option key={s} value={s} />)}</datalist>
 
+          <fieldset className="space-y-2 rounded-xl p-3 ring-1 ring-foreground/10">
+            <legend className="px-1 text-sm font-semibold">PDF design</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {QUOTE_TEMPLATES.map((t) => (
+                <label key={t} className="flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border-2 border-border p-3 has-[:checked]:border-secondary has-[:checked]:bg-muted/40">
+                  <input type="radio" name="quote-template" className="mt-0.5 size-5 accent-primary" checked={q.template === t} onChange={() => set('template', t)} />
+                  <span>
+                    <span className="block font-medium">{QUOTE_TEMPLATE_LABEL[t]}</span>
+                    <span className="block text-xs text-muted-foreground">{QUOTE_TEMPLATE_HINT[t]}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <Section n={1} title="System">
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="System type">
@@ -323,10 +341,13 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
 
           <Section n={8} title="Warranty & service">
             <div className="grid gap-3 sm:grid-cols-4">
-              <Field label="Panel warranty (years)">
-                <input {...num('panelWarrantyYears')} />
+              <Field label="Solar panel warranty" className="sm:col-span-2">
+                <input {...txt('panelWarrantyText')} placeholder="e.g. 25 Years Manufacturer's Product Warranty & 12 Years Performance Warranty" />
               </Field>
-              <Field label="Inverter warranty">
+              <Field label="Structure warranty" className="sm:col-span-2">
+                <input {...txt('structureWarranty')} placeholder="e.g. 10 Years Warranty Subject to annual Paint Job" />
+              </Field>
+              <Field label="Inverter warranty" className="sm:col-span-2">
                 <input {...txt('inverterWarranty')} />
               </Field>
               <Field label="Battery warranty">
@@ -355,7 +376,7 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
             </Field>
           </Section>
 
-          <div className="sticky bottom-20 z-10 space-y-3 rounded-xl bg-card p-3 shadow-lg ring-1 ring-foreground/10 md:bottom-4">
+          <div className="sticky bottom-0 z-10 space-y-2 rounded-xl bg-card p-3 shadow-lg ring-1 ring-foreground/10">
             <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">
               <div className="text-sm">
                 <p>

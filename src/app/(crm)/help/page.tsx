@@ -66,7 +66,7 @@ export default async function HelpPage() {
         <SectionCard title="For managers">
           <Steps
             items={[
-              <>Settings → <b>Users</b>: add your call agents and field agents (they choose their own password at first sign-in).</>,
+              <>Team → <b>Add a team member</b>: add your call agents, field agents and custom roles (they choose their own password at first sign-in).</>,
               <>Settings → <b>Google Sheets</b>: connect your leads Sheet, then press <b>Start from now</b> (or import history) once. Do not rename the phone / date columns.</>,
               <>Team page: the <b>assignment order</b>, timings, “only checked-in agents”, “give out leads at night too”, pause.</>,
               <>Dashboard → <b>Waiting for assignment</b> shows why leads wait (nobody checked in, office closed…) and has <b>Assign waiting leads now</b>.</>,
