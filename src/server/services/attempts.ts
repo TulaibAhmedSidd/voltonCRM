@@ -231,6 +231,9 @@ async function applyOutcome(attempt: InstanceType<typeof ContactAttempt>, input:
       updatedBy: oid(user.id),
       ...(closedByAgent ? { closeReview: { status: 'pending', by: null, at: null } } : {}),
     })
+    if (input.city?.trim()) {
+      await Contact.updateOne({ _id: lead.contactId }, { $set: { city: input.city.trim() } }, { session })
+    }
     await lead.save({ session })
     await logActivity(lead._id, 'attempt_logged', user.id, { attemptId: String(attempt._id), channel: attempt.channel, result: input.result, response: input.response, flags, remarks: input.remarks }, session)
     if (nextDue) {

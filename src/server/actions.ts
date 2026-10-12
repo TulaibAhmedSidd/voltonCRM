@@ -195,6 +195,7 @@ export async function logOutcomeAction(_prev: ActionState, fd: FormData): Promis
       durationSec: num(fd, 'durationMin') !== undefined ? Math.round(num(fd, 'durationMin')! * 60) : undefined,
       closeLead: fd.get('closeLead') === 'on',
       wonValuePkr: num(fd, 'wonValuePkr'),
+      city: str(fd, 'city'),
       leftAt: ms('leftAt'),
       returnedAt: ms('returnedAt'),
     })
@@ -1116,7 +1117,7 @@ export interface LeadDetailsView {
 
 /** Everything the Sheet sent for one lead (opened from the leads list or the lead page). */
 export async function getLeadDetailsAction(leadId: string): Promise<LeadDetailsView> {
-  const user = await requireRole('admin', 'manager', 'agent')
+  const user = await requireRole('admin', 'manager', 'agent', 'marketing')
   try {
     const lead = await loadLeadFor(user, leadId, 'view')
     if (user.role === 'agent' && lead.assignment?.state !== 'accepted') return { ok: false, message: 'Accept the lead to see all its details.' }

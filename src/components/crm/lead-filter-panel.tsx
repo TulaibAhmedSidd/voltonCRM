@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { FilterBar, FilterChip } from '@/components/common/filter-bar'
 import { SelectField, TextField } from '@/components/common/fields'
 import { DEPARTMENTS, STAGES } from '@/domain/constants'
+import { PAKISTANI_CITIES } from '@/domain/cities'
 import {
   activeFilterCount,
   ATTEMPT_FILTER_LABEL,
@@ -90,7 +91,7 @@ export function LeadFilterPanel({
             <SelectField label="Tries" name="attempts" placeholder="Any number" defaultValue={filters.attempts ?? ''} options={opts(ATTEMPT_FILTERS, (a) => ATTEMPT_FILTER_LABEL[a])} />
             <SelectField label="Next follow-up" name="followup" placeholder="Any" defaultValue={filters.followup ?? ''} options={opts(FOLLOWUP_FILTERS, (f) => FOLLOWUP_FILTER_LABEL[f])} />
             {forms.length ? <SelectField label="Form / campaign" name="form" placeholder="All forms and campaigns" defaultValue={filters.form ?? ''} options={forms.map((f) => ({ value: f, label: f }))} /> : null}
-            <TextField label="City" name="city" defaultValue={filters.city ?? ''} placeholder="e.g. Lahore" />
+            <SelectField label="City" name="city" placeholder="All cities" defaultValue={filters.city ?? ''} options={PAKISTANI_CITIES.map((c) => ({ value: c, label: c }))} />
           </div>
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Received (Pakistan time)</legend>

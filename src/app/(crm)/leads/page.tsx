@@ -10,6 +10,7 @@ import { LeadCard } from '@/components/crm/lead-card'
 import { LeadDetailsDialog } from '@/components/crm/lead-details-dialog'
 import { LeadBulkActions, LeadSelectBox } from '@/components/crm/lead-bulk-actions'
 import { AssignmentBadge, DepartmentBadge, SourceBadge, StageBadge } from '@/components/crm/badges'
+import { StatusBadge } from '@/components/common/status-badge'
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
 import { AssignLeadDialog } from '@/components/crm/assign-lead-dialog'
 import { ActionForm } from '@/components/common/action-form'
@@ -19,7 +20,7 @@ import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone, maskPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
 import { ArrowLeft, List, Users } from 'lucide-react'
-import { LEAD_VIEWS, PAGE_SIZE, employeeLeadStats, getQueuePanels, getTeamBoard, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
+import { LEAD_VIEWS, PAGE_SIZE, employeeLeadStats, getAssignableAgents, getQueuePanels, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
 import { en } from '@/i18n/en'
 import { DATE_PRESET_LABEL, activeFilterCount, parseLeadFilters, receivedRange, type DatePreset } from '@/domain/lead-filters'
 import { SectionBack, SectionHub } from '@/components/common/section-hub'
@@ -68,12 +69,11 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
   const canDelete = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin'
   const canAssign = canDelete
   const canExport = canDelete || user.role === 'marketing'
-  const [{ rows, total, counts }, filterOptions, teamBoard] = await Promise.all([
+  const [{ rows, total, counts }, filterOptions, assignableAgents] = await Promise.all([
     listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc', filters, personId }),
     leadFilterOptions(user),
-    canAssign ? getTeamBoard(user) : Promise.resolve([]),
+    canAssign ? getAssignableAgents(user) : Promise.resolve([]),
   ])
-  const assignableAgents = teamBoard.filter((m) => m.role === 'agent')
   const sources = user.role === 'agent' || personId ? [] : await leadSourcesStatus(user)
   const views = LEAD_VIEWS.filter((v) => !(v === 'mine' && user.role !== 'agent') && !(v === 'unassigned' && (user.role === 'agent' || personId)))
   const href = (params: Record<string, string | number | undefined>) => {
@@ -95,7 +95,16 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         </Link>
       ),
     },
-    { key: 'stage', header: 'Stage', cell: (l) => <StageBadge stage={l.stage} size="sm" /> },
+    {
+      key: 'stage',
+      header: 'Stage',
+      cell: (l) => (
+        <div className="flex flex-wrap items-center gap-1">
+          <StageBadge stage={l.stage} size="sm" />
+          {l.lostReason === 'not_interested' ? <StatusBadge tone="danger" label="Not interested" size="sm" /> : null}
+        </div>
+      ),
+    },
     { key: 'dept', header: 'Dept', cell: (l) => <DepartmentBadge department={l.department} size="sm" /> },
     { key: 'source', header: 'Source', cell: (l) => <SourceBadge channel={l.channel} detail={l.sourceDetail} platform={l.platform} isAd={l.isAd} size="sm" /> },
     {

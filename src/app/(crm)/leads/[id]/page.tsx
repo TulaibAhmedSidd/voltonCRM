@@ -10,24 +10,24 @@ import { PageHeader } from '@/components/common/page-header'
 import { SectionCard } from '@/components/common/section-card'
 import { EmptyState } from '@/components/common/states'
 import { StatusBadge } from '@/components/common/status-badge'
-import { Timeline, TimelineItem } from '@/components/common/timeline'
 import { AttemptCard } from '@/components/crm/attempt-card'
 import { ChatPanel } from '@/components/crm/chat-panel'
 import { ContactActions } from '@/components/crm/contact-actions'
 import { FollowUpItem } from '@/components/crm/follow-up-item'
 import { LeadHeader } from '@/components/crm/lead-header'
+import { LeadTimeline } from '@/components/crm/lead-timeline'
 import { LeadDetailsDialog } from '@/components/crm/lead-details-dialog'
 import { LeadJourney, NextStepCard } from '@/components/crm/lead-journey'
 import { leadJourney } from '@/domain/lead-journey'
 import { CUSTOMER_RESPONSE_META } from '@/domain/ui-maps'
-import { DEPARTMENTS, LOST_REASONS, PIPELINES, PROPERTY_TYPES, ROOF_TYPES, SHADING_LEVELS, type ActivityType, type CallResult, type Stage, type VisitStatus } from '@/domain/constants'
-import { ACTIVITY_TYPE_META, ATTEMPT_CHANNEL_META, CALL_RESULT_META, DEPARTMENT_META, STAGE_META, VISIT_STATUS_META, optionsFor } from '@/domain/ui-maps'
+import { DEPARTMENTS, LOST_REASONS, PIPELINES, PROPERTY_TYPES, ROOF_TYPES, SHADING_LEVELS, type VisitStatus } from '@/domain/constants'
+import { CALL_RESULT_META, DEPARTMENT_META, STAGE_META, VISIT_STATUS_META, optionsFor } from '@/domain/ui-maps'
 import { en } from '@/i18n/en'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { isManagerOrAdmin } from '@/server/auth/scope'
 import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, eraseCustomerAction, changeStageAction, createVisitAction, reopenLeadAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
-import { getLeadDetail, getTeamBoard } from '@/server/services/queries'
+import { getAssignableAgents, getLeadDetail } from '@/server/services/queries'
 import { AGENT_STAGES } from '@/server/services/leads'
 import { formatPkrCompact } from '@/lib/money'
 import { QuotationBuilder } from '@/components/crm/quotation-builder'
@@ -36,30 +36,22 @@ import { PingAgent } from '@/components/crm/ping-agent'
 import { defaultQuotation } from '@/domain/quotation'
 import { lastQuotationInput, listQuotations } from '@/server/services/quotations'
 
-function describe(type: string, d: Record<string, unknown>): string {
-  if (type === 'attempt_logged') {
-    const channel = d.channel ? ATTEMPT_CHANNEL_META[d.channel as keyof typeof ATTEMPT_CHANNEL_META]?.label : ''
-    const result = d.result ? CALL_RESULT_META[d.result as CallResult]?.label : ''
-    return [channel, result, d.remarks].filter(Boolean).join(' · ')
-  }
-  if (type === 'stage_changed' && d.stage) return STAGE_META[d.stage as Stage]?.label ?? ''
-  if (d.text) return String(d.text)
-  if (d.status) return String(d.status)
-  return ''
-}
-
 export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const user = await requireUser()
   const { id } = await props.params
   const sp = await props.searchParams
-  const data = await getLeadDetail(id, user)
+  const manager = isManagerOrAdmin(user)
+  const [data, agents, quotations, lastQuote, catalog] = await Promise.all([
+    getLeadDetail(id, user),
+    manager ? getAssignableAgents(user) : Promise.resolve([]),
+    listQuotations(user, id, true),
+    lastQuotationInput(user, id, true),
+    user.role === 'field_agent' ? Promise.resolve(undefined) : websiteCatalog(),
+  ])
   if (!data) notFound()
   const { lead, raw, attempts, followUps, activities, messages, visits } = data
-  const manager = isManagerOrAdmin(user)
   const mine = lead.agent?.id === user.id
-  const agents = manager ? (await getTeamBoard(user)).filter((m) => m.role === 'agent') : []
   const site = raw.site as Record<string, string | number | boolean | undefined>
-  const [quotations, lastQuote, catalog] = await Promise.all([listQuotations(user, lead.id), lastQuotationInput(user, lead.id), user.role === 'field_agent' ? undefined : websiteCatalog()])
   const canStage = manager || (mine && lead.status === 'open' && lead.assignmentState === 'accepted')
   const canQuote = user.role !== 'field_agent' && lead.status === 'open' && (manager || (mine && lead.assignmentState === 'accepted'))
   // Steps + "what to do now" (src/domain/lead-journey.ts)
@@ -104,7 +96,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
             </form>
           ) : (
             <div className="space-y-3">
-              <ContactActions leadId={lead.id} leadName={lead.name} leadNo={lead.leadNo} attemptCount={journey.triesDone} pending={raw.pendingAttempt} lastResult={lastResult} stageLabel={STAGE_META[lead.stage].label} />
+              <ContactActions leadId={lead.id} leadName={lead.name} leadNo={lead.leadNo} attemptCount={journey.triesDone} pending={raw.pendingAttempt} lastResult={lastResult} stageLabel={STAGE_META[lead.stage].label} leadCity={lead.city} />
             </div>
           )}
         </SectionCard>
@@ -273,17 +265,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
           {activities.length === 0 ? (
             <EmptyState />
           ) : (
-            <Timeline>
-              {activities.map((a) => {
-                const meta = ACTIVITY_TYPE_META[a.type as ActivityType]
-                const text = describe(a.type, a.data)
-                return (
-                  <TimelineItem key={a.id} icon={meta?.icon} tone={meta?.tone} title={`${meta?.label ?? a.type}${a.actor ? ` — ${a.actor}` : ''}`} time={formatPktDateTime(new Date(a.at))}>
-                    {text ? <p className="text-muted-foreground">{text}</p> : null}
-                  </TimelineItem>
-                )
-              })}
-            </Timeline>
+            <LeadTimeline activities={activities} />
           )}
 
         </div>,
@@ -338,9 +320,11 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               </div>
               <CheckboxField label="Battery required" name="batteryRequired" defaultChecked={!!site.batteryRequired} />
               <CheckboxField label="Net-metering required" name="netMeteringRequired" defaultChecked={!!site.netMeteringRequired} />
-              <Button type="submit" size="touch">
-                Save site details
-              </Button>
+              {user.role !== 'marketing' ? (
+                <Button type="submit" size="touch">
+                  Save site details
+                </Button>
+              ) : null}
             </ActionForm>
           </SectionCard>
           <SectionCard title="Site visit" description="Given automatically to the field agent with the least kW.">

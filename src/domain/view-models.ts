@@ -53,6 +53,7 @@ export interface LeadSummary {
   nextFollowUpAt?: string
   /** Accept or first-contact deadline while one is running. */
   sla?: { startedAt: string; deadline: string }
+  lostReason?: string
   receivedAt: string
 }
 
@@ -114,6 +115,13 @@ export interface TeamMemberView {
   openLeads: number
   pendingAccept: number
   lastActionAt?: string
+  departmentCode?: Department
+}
+
+export interface AssignableAgent {
+  id: string
+  name: string
+  attendance?: AttendanceStatus
   departmentCode?: Department
 }
 

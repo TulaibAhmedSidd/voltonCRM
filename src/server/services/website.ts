@@ -16,7 +16,7 @@ function websiteDb(): Promise<Connection> | null {
   if (!uri) return null
   if (!globalThis.__voltonWebsiteDb) {
     globalThis.__voltonWebsiteDb = mongoose
-      .createConnection(uri, { maxPoolSize: 3, maxIdleTimeMS: 5_000, serverSelectionTimeoutMS: 8_000, readPreference: 'secondaryPreferred' })
+      .createConnection(uri, { maxPoolSize: 5, maxIdleTimeMS: 60_000, serverSelectionTimeoutMS: 5_000, readPreference: 'secondaryPreferred' })
       .asPromise()
       .catch((error: unknown) => {
         globalThis.__voltonWebsiteDb = undefined
@@ -78,7 +78,7 @@ export const resetWebsiteCatalogCache = () => {
  * Active website products grouped for the quotation builder. Cached for 5 minutes. Never throws — when the website
  * database is not set up or cannot be reached, `ok` is false and the builder falls back to its own suggestions.
  */
-export async function websiteCatalog(timeoutMs = 3_000): Promise<WebsiteCatalog> {
+export async function websiteCatalog(timeoutMs = 1_200): Promise<WebsiteCatalog> {
   if (cache && Date.now() - cache.at < FRESH_MS) return cache.value
   const empty: WebsiteCatalog = { ok: false, items: { panels: [], inverters: [], batteries: [] } }
   // The lead page waits for this — never longer than timeoutMs (the old list / suggestions are used instead).

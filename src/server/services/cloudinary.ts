@@ -9,8 +9,11 @@ import { getServerEnv } from '@/lib/env'
  */
 function creds() {
   const env = getServerEnv()
-  if (!env.CLOUDINARY_CLOUD_NAME || !env.CLOUDINARY_API_KEY || !env.CLOUDINARY_API_SECRET) throw new UserError('Cloudinary keys are missing in .env.local')
-  return { cloud: env.CLOUDINARY_CLOUD_NAME, key: env.CLOUDINARY_API_KEY, secret: env.CLOUDINARY_API_SECRET }
+  const cloud = env.CLOUDINARY_CLOUD_NAME_NEW || env.CLOUDINARY_CLOUD_NAME
+  const key = env.CLOUDINARY_API_KEY_NEW || env.CLOUDINARY_API_KEY
+  const secret = env.CLOUDINARY_API_SECRET_NEW || env.CLOUDINARY_API_SECRET
+  if (!cloud || !key || !secret) throw new UserError('Cloudinary keys are missing in .env.local')
+  return { cloud, key, secret }
 }
 
 /** Cloudinary signature: sorted "k=v&k=v" + api_secret, SHA-1 hex. */
@@ -33,7 +36,10 @@ export function uploadSignature(folder: string) {
 
 export const isCloudinaryConfigured = () => {
   const env = getServerEnv()
-  return !!(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET)
+  const cloud = env.CLOUDINARY_CLOUD_NAME_NEW || env.CLOUDINARY_CLOUD_NAME
+  const key = env.CLOUDINARY_API_KEY_NEW || env.CLOUDINARY_API_KEY
+  const secret = env.CLOUDINARY_API_SECRET_NEW || env.CLOUDINARY_API_SECRET
+  return !!(cloud && key && secret)
 }
 
 /** Look up a private upload (Admin API) — proves the file exists, where it is, when it was made and its content hash. */

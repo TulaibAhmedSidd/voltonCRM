@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { CalendarClock, User } from 'lucide-react'
 import { DepartmentBadge, SourceBadge, StageBadge, AssignmentBadge } from '@/components/crm/badges'
+import { StatusBadge } from '@/components/common/status-badge'
 import { SlaTimer } from '@/components/crm/sla-timer'
 import { MAX_FOLLOW_UPS } from '@/domain/constants'
 import type { LeadSummary } from '@/domain/view-models'
@@ -24,6 +25,7 @@ export function LeadCard({ lead, href, showAgent = true, className }: { lead: Le
       </div>
       <div className="flex flex-wrap gap-1.5">
         <StageBadge stage={lead.stage} size="sm" />
+        {lead.lostReason === 'not_interested' ? <StatusBadge tone="danger" label="Not interested" size="sm" /> : null}
         <DepartmentBadge department={lead.department} size="sm" />
         <SourceBadge channel={lead.channel} detail={lead.sourceDetail} platform={lead.platform} isAd={lead.isAd} size="sm" />
         {lead.assignmentState !== 'accepted' ? <AssignmentBadge state={lead.assignmentState} size="sm" /> : null}

@@ -19,10 +19,13 @@ export const metadata = { title: 'Site visits' }
 
 /** Excel "Visits" tab: each visit goes to the field agent with the least active kW; "Not interested" → next agent. */
 export default async function VisitsPage() {
-  const user = await requireRole('admin', 'manager', 'field_agent')
-  const visits = await listVisits(user)
-  const fieldAgents = user.role === 'field_agent' ? [] : (await getTeamBoard({ ...user, role: 'admin' })).filter((m) => m.role === 'field_agent')
-  const load = user.role === 'field_agent' ? new Map() : await fieldAgentLoad()
+  const user = await requireRole('admin', 'manager', 'field_agent', 'marketing')
+  const [visits, board, load] = await Promise.all([
+    listVisits(user),
+    user.role === 'field_agent' ? Promise.resolve([]) : getTeamBoard({ ...user, role: 'admin' }),
+    user.role === 'field_agent' ? Promise.resolve(new Map()) : fieldAgentLoad(),
+  ])
+  const fieldAgents = board.filter((m) => m.role === 'field_agent')
   return (
     <>
       <PageHeader title="Site visits" description="Load-balanced by kW across the field agents." />

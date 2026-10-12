@@ -17,13 +17,9 @@ import { SelectField } from '@/components/common/fields'
 import { assignLeadAction } from '@/server/actions'
 import { en } from '@/i18n/en'
 import type { Department } from '@/domain/constants'
+import type { AssignableAgent } from '@/domain/view-models'
 
-export interface AssignableAgent {
-  id: string
-  name: string
-  attendance?: 'checked_in' | 'on_break' | 'checked_out'
-  departmentCode?: Department
-}
+export type { AssignableAgent }
 
 type ButtonVariant = NonNullable<VariantProps<typeof buttonVariants>['variant']>
 type ButtonSize = NonNullable<VariantProps<typeof buttonVariants>['size']>

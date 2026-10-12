@@ -62,17 +62,17 @@ export async function createQuotation(user: SessionUser, leadId: string, raw: un
   return { id: String(quotation._id), quotationNo: quotation.quotationNo, total }
 }
 
-export async function listQuotations(user: SessionUser, leadId: string): Promise<QuotationSummary[]> {
+export async function listQuotations(user: SessionUser, leadId: string, skipLeadCheck = false): Promise<QuotationSummary[]> {
   await connectDb()
-  if (!(await Lead.exists({ $and: [{ _id: oid(leadId) }, leadScope(user)] }))) return []
+  if (!skipLeadCheck && !(await Lead.exists({ $and: [{ _id: oid(leadId) }, leadScope(user)] }))) return []
   const rows = await Quotation.find({ leadId: oid(leadId) }).sort({ issuedAt: -1 }).limit(50).lean()
   return rows.map((q) => ({ id: String(q._id), quotationNo: q.quotationNo, total: q.total, systemKw: q.systemKw ?? 0, issuedAt: q.issuedAt.toISOString(), validUntil: q.validUntil.toISOString(), preparedBy: q.preparedBy.name }))
 }
 
 /** Latest quotation's form values, to start the next one from (a revision). */
-export async function lastQuotationInput(user: SessionUser, leadId: string): Promise<QuotationInput | null> {
+export async function lastQuotationInput(user: SessionUser, leadId: string, skipLeadCheck = false): Promise<QuotationInput | null> {
   await connectDb()
-  if (!(await Lead.exists({ $and: [{ _id: oid(leadId) }, leadScope(user)] }))) return null
+  if (!skipLeadCheck && !(await Lead.exists({ $and: [{ _id: oid(leadId) }, leadScope(user)] }))) return null
   const q = await Quotation.findOne({ leadId: oid(leadId) }).sort({ issuedAt: -1 }).select('input').lean()
   const parsed = q ? quotationInput.safeParse(q.input) : null
   return parsed?.success ? parsed.data : null

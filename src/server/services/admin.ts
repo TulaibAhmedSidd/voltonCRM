@@ -72,7 +72,11 @@ export async function getAdminOverview() {
       failedJobs,
       whatsapp: !!(env.WHATSAPP_TOKEN && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_APP_SECRET && env.WHATSAPP_VERIFY_TOKEN),
       metaLeads: metaMissing().length === 0,
-      cloudinary: !!(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET),
+      cloudinary: !!(
+        (env.CLOUDINARY_CLOUD_NAME_NEW || env.CLOUDINARY_CLOUD_NAME) &&
+        (env.CLOUDINARY_API_KEY_NEW || env.CLOUDINARY_API_KEY) &&
+        (env.CLOUDINARY_API_SECRET_NEW || env.CLOUDINARY_API_SECRET)
+      ),
       cronSecret: !!env.CRON_SECRET,
     },
     audit: audit.map((a) => ({

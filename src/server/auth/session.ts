@@ -46,6 +46,19 @@ export async function endSession(): Promise<void> {
   jar.delete(SESSION_COOKIE)
 }
 
+let deptCache: { at: number; map: Map<string, Department> } | null = null
+async function getDeptCode(deptId: unknown): Promise<Department | null> {
+  if (!deptId) return null
+  const idStr = String(deptId)
+  if (deptCache && Date.now() - deptCache.at < 300_000) {
+    return deptCache.map.get(idStr) ?? null
+  }
+  const all = await DepartmentModel.find().select('_id code').lean()
+  const map = new Map<string, Department>(all.map((d) => [String(d._id), d.code as Department]))
+  deptCache = { at: Date.now(), map }
+  return map.get(idStr) ?? null
+}
+
 /** Current user or null. Cached per request. Inactive/deleted users are treated as signed out. */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const jar = await cookies()
@@ -56,14 +69,14 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   if (!session) return null
   const user = await User.findOne({ _id: session.userId, isActive: true, deletedAt: null }).lean()
   if (!user) return null
-  const department = user.departmentId ? await DepartmentModel.findById(user.departmentId).lean() : null
+  const departmentCode = await getDeptCode(user.departmentId)
   return {
     id: String(user._id),
     name: user.name,
     email: user.email,
     role: user.role as Role,
     departmentId: user.departmentId ? String(user.departmentId) : null,
-    departmentCode: (department?.code as Department | undefined) ?? null,
+    departmentCode,
     managerId: user.managerId ? String(user.managerId) : null,
     mustChangePassword: !!user.mustChangePassword,
     websiteAccess: websiteAccessOf({ role: user.role as Role, jobTitle: user.jobTitle, createdAt: user.createdAt, websiteAccess: user.websiteAccess }),

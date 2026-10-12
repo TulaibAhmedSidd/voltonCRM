@@ -8,6 +8,8 @@ import { RefreshButton } from '@/components/common/refresh-button'
 import { InstallPrompt } from '@/components/common/pwa'
 import { PushPrompt } from '@/components/common/push-prompt'
 import { pushPublicKey } from '@/server/services/push'
+import { getAttendance } from '@/server/services/assignment'
+import { CheckInReminderBanner } from '@/components/crm/check-in-reminder-banner'
 import { requireUser } from '@/server/auth/session'
 import { logoutAction } from '@/server/actions'
 
@@ -22,6 +24,9 @@ export default async function CrmLayout({ children }: LayoutProps<'/'>) {
   // Password chosen by an admin/manager: the person must set their own before using the app.
   if (user.mustChangePassword) redirect('/change-password')
   const pushKey = pushPublicKey()
+  const isAgent = user.role === 'agent' || user.role === 'field_agent' || user.role === 'staff'
+  const attendance = isAgent ? await getAttendance(user.id) : null
+
   return (
     <AppShell
       role={user.role}
@@ -42,6 +47,12 @@ export default async function CrmLayout({ children }: LayoutProps<'/'>) {
       <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-6">
         <InstallPrompt />
         <PushPrompt pushKey={pushKey} />
+        {isAgent ? (
+          <CheckInReminderBanner
+            status={(attendance?.status as 'checked_in') ?? 'checked_out'}
+            since={attendance?.checkInAt?.toISOString()}
+          />
+        ) : null}
         {children}
       </div>
     </AppShell>

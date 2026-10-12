@@ -1,7 +1,7 @@
 import 'server-only'
 import { Types } from 'mongoose'
 import type { Department, KpiKey, LeadStatus, Role, Stage } from '@/domain/constants'
-import type { AttemptView, FollowUpView, KpiItem, LeadDetail, LeadSummary, MessageView, PendingTap, TeamMemberView } from '@/domain/view-models'
+import type { AssignableAgent, AttemptView, FollowUpView, KpiItem, LeadDetail, LeadSummary, MessageView, PendingTap, TeamMemberView } from '@/domain/view-models'
 import { pktDateKey, pktParts } from '@/lib/dates-pkt'
 import { pktMidnight, receivedRange, sourceCondition, type LeadFilters } from '@/domain/lead-filters'
 import { formatPkrCompact } from '@/lib/money'
@@ -34,6 +34,7 @@ interface LeadLike {
   departmentId?: unknown
   stage: string
   status: string
+  lostReason?: string | null
   source?: { channel?: string | null; platform?: string | null; campaignName?: string | null; formName?: string | null; ctwa?: { headline?: string | null; sourceId?: string | null } | null } | null
   assignment?: { agentId?: unknown; state?: string | null; assignedAt?: Date | null } | null
   attemptCount?: number | null
@@ -41,18 +42,29 @@ interface LeadLike {
   receivedAt: Date
 }
 
+let deptMapCache: { at: number; map: Map<string, Department> } | null = null
+async function getDepartmentMap(): Promise<Map<string, Department>> {
+  if (deptMapCache && Date.now() - deptMapCache.at < 300_000) {
+    return deptMapCache.map
+  }
+  const departments = await DepartmentModel.find().select('_id code').lean()
+  const map = new Map<string, Department>(departments.map((d) => [String(d._id), d.code as Department]))
+  deptMapCache = { at: Date.now(), map }
+  return map
+}
+
 async function lookups(leads: { contactId: unknown; departmentId?: unknown; assignment?: { agentId?: unknown } | null }[]) {
   const contactIds = [...new Set(leads.map((l) => String(l.contactId)))]
   const agentIds = [...new Set(leads.map((l) => l.assignment?.agentId).filter(Boolean).map(String))]
-  const [contacts, agents, departments] = await Promise.all([
-    Contact.find({ _id: { $in: contactIds } }).lean(),
-    User.find({ _id: { $in: agentIds } }).select('name').lean(),
-    DepartmentModel.find().lean(),
+  const [contacts, agents, dept] = await Promise.all([
+    contactIds.length ? Contact.find({ _id: { $in: contactIds } }).lean() : Promise.resolve([]),
+    agentIds.length ? User.find({ _id: { $in: agentIds } }).select('name').lean() : Promise.resolve([]),
+    getDepartmentMap(),
   ])
   return {
     contact: new Map(contacts.map((c) => [String(c._id), c])),
     agent: new Map(agents.map((a) => [String(a._id), a.name])),
-    dept: new Map(departments.map((d) => [String(d._id), d.code as Department])),
+    dept,
   }
 }
 
@@ -83,6 +95,7 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
     attemptCount: l.attemptCount ?? 0,
     nextFollowUpAt: iso(l.nextFollowUpAt),
     sla: user.role === 'agent' || user.role === 'manager' || user.role === 'admin' ? sla : undefined,
+    lostReason: l.lostReason ?? undefined,
     receivedAt: iso(l.receivedAt)!,
   }
 }
@@ -127,7 +140,7 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
   if (params.agentId && user.role !== 'agent' && Types.ObjectId.isValid(params.agentId)) extra['assignment.agentId'] = oid(params.agentId)
   if (params.department) {
     const dept = await DepartmentModel.findOne({ code: params.department }).lean()
-    if (dept && isAdminRole(user.role)) extra.departmentId = dept._id
+    if (dept && (isAdminRole(user.role) || user.role === 'marketing')) extra.departmentId = dept._id
   }
   if (params.q?.trim()) {
     const q = params.q.trim()
@@ -304,18 +317,43 @@ export async function getLeadDetail(id: string, user: SessionUser) {
   if (!Types.ObjectId.isValid(id)) return null
   const lead = await Lead.findOne({ _id: oid(id), ...leadScope(user) }).lean()
   if (!lead) return null
-  const maps = await lookups([lead])
-  const contact = maps.contact.get(String(lead.contactId))
-  const [attempts, followUps, activities, messages, visits, otherLeads] = await Promise.all([
+  const [maps, attempts, followUps, activities, messages, visits, otherLeads, team] = await Promise.all([
+    lookups([lead]),
     ContactAttempt.find({ leadId: lead._id }).sort({ serverTapAt: -1 }).lean(),
     FollowUp.find({ leadId: lead._id }).sort({ dueAt: -1 }).lean(),
     Activity.find({ leadId: lead._id }).sort({ at: -1 }).limit(100).lean(),
     Message.find(user.role === 'agent' ? { leadId: lead._id } : { contactId: lead.contactId, $or: [{ leadId: lead._id }, { leadId: null }] }).sort({ at: 1 }).limit(200).lean(),
     Visit.find({ leadId: lead._id, deletedAt: null }).sort({ createdAt: -1 }).lean(),
     Lead.find({ $and: [{ contactId: lead.contactId, _id: { $ne: lead._id } }, leadScope(user)] }).select('leadNo departmentId status').lean(),
+    lead.teamId ? Team.findById(lead.teamId).select('acceptWithinMin').lean() : Promise.resolve(null),
   ])
-  const people = new Map((await User.find({ _id: { $in: [...attempts.map((a) => a.agentId), ...activities.map((a) => a.actorId).filter(Boolean), ...messages.map((m) => m.sentByUserId).filter(Boolean)] } }).select('name').lean()).map((u) => [String(u._id), u.name]))
-  const liveDocs = await liveDocIds(attempts)
+  const activityUserIds: (string | Types.ObjectId)[] = []
+  for (const a of activities) {
+    if (a.actorId) activityUserIds.push(a.actorId)
+    const d = (a.data ?? {}) as Record<string, unknown>
+    if (d.agentId && (typeof d.agentId === 'string' || d.agentId instanceof Types.ObjectId)) activityUserIds.push(d.agentId)
+    if (d.from && (typeof d.from === 'string' || d.from instanceof Types.ObjectId)) activityUserIds.push(d.from)
+    if (d.to && (typeof d.to === 'string' || d.to instanceof Types.ObjectId)) activityUserIds.push(d.to)
+  }
+  if (lead.assignment?.agentId) activityUserIds.push(lead.assignment.agentId)
+  if (lead.assignment?.assignedBy) activityUserIds.push(lead.assignment.assignedBy)
+
+  const [peopleUsers, liveDocs] = await Promise.all([
+    User.find({
+      _id: {
+        $in: [
+          ...attempts.map((a) => a.agentId),
+          ...messages.map((m) => m.sentByUserId).filter(Boolean),
+          ...activityUserIds,
+        ],
+      },
+    })
+      .select('name')
+      .lean(),
+    liveDocIds(attempts),
+  ])
+  const people = new Map(peopleUsers.map((u) => [String(u._id), u.name]))
+  const contact = maps.contact.get(String(lead.contactId))
   const summary = toSummary(lead, maps, user)
   const detail: LeadDetail = {
     ...summary,
@@ -356,10 +394,25 @@ export async function getLeadDetail(id: string, user: SessionUser) {
   }))
   return {
     lead: detail,
-    raw: { departmentId: lead.departmentId ? String(lead.departmentId) : null, site: lead.site ?? {}, trading: lead.trading ?? {}, extra: (lead.extra ?? {}) as Record<string, string>, lostReason: lead.lostReason, closeReview: (lead.closeReview?.status ?? 'none') as string, wonValuePkr: lead.wonValuePkr ?? null, pendingAttempt: ((p) => (p ? { id: p.id, channel: p.channel, tappedAt: p.tappedAt } : null))(attemptViews.find((a) => !a.loggedAt && a.agent.id === user.id)) as PendingTap | null, acceptWithinMin: lead.teamId ? ((await Team.findById(lead.teamId).select('acceptWithinMin').lean())?.acceptWithinMin ?? 5) : 5 },
+    raw: { departmentId: lead.departmentId ? String(lead.departmentId) : null, site: lead.site ?? {}, trading: lead.trading ?? {}, extra: (lead.extra ?? {}) as Record<string, string>, lostReason: lead.lostReason, closeReview: (lead.closeReview?.status ?? 'none') as string, wonValuePkr: lead.wonValuePkr ?? null, pendingAttempt: ((p) => (p ? { id: p.id, channel: p.channel, tappedAt: p.tappedAt } : null))(attemptViews.find((a) => !a.loggedAt && a.agent.id === user.id)) as PendingTap | null, acceptWithinMin: team?.acceptWithinMin ?? 5 },
     attempts: attemptViews,
     followUps: followUps.map((f) => ({ id: String(f._id), leadId: String(f.leadId), leadName: detail.name, number: f.number, dueAt: iso(f.dueAt)!, status: f.status, isOverdue: f.status === 'pending' && f.dueAt < new Date() }) as FollowUpView),
-    activities: activities.map((a) => ({ id: String(a._id), type: a.type, at: iso(a.at)!, actor: a.actorId ? people.get(String(a.actorId)) : undefined, data: (a.data ?? {}) as Record<string, unknown> })),
+    activities: activities.map((a) => {
+      const d = (a.data ?? {}) as Record<string, unknown>
+      const targetAgentName = d.agentId ? people.get(String(d.agentId)) : undefined
+      const fromAgentName = d.from ? people.get(String(d.from)) : undefined
+      return {
+        id: String(a._id),
+        type: a.type,
+        at: iso(a.at)!,
+        actor: a.actorId ? people.get(String(a.actorId)) : undefined,
+        data: {
+          ...d,
+          ...(targetAgentName ? { targetAgentName } : {}),
+          ...(fromAgentName ? { fromAgentName } : {}),
+        },
+      }
+    }),
     messages: messageViews,
     visits: visits.map((v) => ({ id: String(v._id), status: v.status, kw: v.kw, scheduledAt: iso(v.scheduledAt), agentId: v.agentId ? String(v.agentId) : null })),
     otherLeads: otherLeads.map((o) => ({ id: String(o._id), leadNo: o.leadNo, status: o.status })),
@@ -446,6 +499,30 @@ export async function getTeamBoard(user: SessionUser): Promise<TeamMemberView[]>
     openLeads: o.get(String(m._id))?.n ?? 0,
     pendingAccept: p.get(String(m._id))?.n ?? 0,
     lastActionAt: iso(l.get(String(m._id))?.at),
+    departmentCode: m.departmentId ? deptCodeById.get(String(m.departmentId)) : undefined,
+  }))
+}
+
+/**
+ * Fast lookup of active agents and their attendance for assignment dialogs.
+ * Direct indexed query without heavy lead aggregations.
+ */
+export async function getAssignableAgents(user: SessionUser): Promise<AssignableAgent[]> {
+  await connectDb()
+  const filter: Record<string, unknown> = { role: 'agent', isActive: true, deletedAt: null }
+  if (user.role === 'manager') filter.departmentId = user.departmentId ? oid(user.departmentId) : null
+  const [members, departments] = await Promise.all([
+    User.find(filter).select('name departmentId').sort({ name: 1 }).lean(),
+    DepartmentModel.find().select('_id code').lean(),
+  ])
+  const deptCodeById = new Map(departments.map((d) => [String(d._id), d.code as Department]))
+  const ids = members.map((m) => m._id)
+  const attendance = await Attendance.find({ userId: { $in: ids }, date: pktDateKey(new Date()) }).select('userId status').lean()
+  const att = new Map(attendance.map((a) => [String(a.userId), a.status]))
+  return members.map((m) => ({
+    id: String(m._id),
+    name: m.name,
+    attendance: att.get(String(m._id)),
     departmentCode: m.departmentId ? deptCodeById.get(String(m.departmentId)) : undefined,
   }))
 }
@@ -537,9 +614,10 @@ export async function listVisits(user: SessionUser) {
 
 export async function listNotifications(userId: string) {
   await connectDb()
-  const rows = await Notification.find({ userId: oid(userId) }).sort({ createdAt: -1 }).limit(30).lean()
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const rows = await Notification.find({ userId: oid(userId), createdAt: { $gte: oneDayAgo } }).sort({ createdAt: -1 }).limit(30).lean()
   return {
-    unread: await Notification.countDocuments({ userId: oid(userId), readAt: null }),
+    unread: await Notification.countDocuments({ userId: oid(userId), readAt: null, createdAt: { $gte: oneDayAgo } }),
     items: rows.map((n) => ({ id: String(n._id), type: n.type, title: n.title, body: n.body, link: n.link, at: iso(n.createdAt)!, read: !!n.readAt })),
   }
 }
@@ -580,4 +658,106 @@ export async function pipelineColumns(user: SessionUser, department: Department)
   const docs = await Lead.find({ ...scope, departmentId: dept._id, status: { $in: ['open', 'won', 'lost'] } }).sort({ stageChangedAt: -1 }).limit(400).lean()
   const maps = await lookups(docs)
   return { stages: dept.stages as Stage[], leads: docs.map((d) => toSummary(d, maps, user)) }
+}
+
+export interface AttendanceHistoryRecord {
+  id: string
+  userId: string
+  userName: string
+  userRole: string
+  departmentCode: string | null
+  date: string
+  status: 'checked_in' | 'on_break' | 'checked_out'
+  checkInAt: string | null
+  checkOutAt: string | null
+  durationText: string
+  missingCheckOut: boolean
+}
+
+export interface AttendanceHistoryReport {
+  records: AttendanceHistoryRecord[]
+  missingCheckInsToday: { id: string; name: string; role: string }[]
+  missingCheckOutsCount: number
+  checkedInTodayCount: number
+  totalEmployeesCount: number
+}
+
+/** Check & balance: complete attendance history for manager / admin with missing checkin/out alerts. */
+export async function getTeamAttendanceHistory(
+  user: SessionUser,
+  days = 14,
+): Promise<AttendanceHistoryReport> {
+  await connectDb()
+  const todayKey = pktDateKey(new Date())
+  const filter: Record<string, unknown> = { deletedAt: null, isActive: true }
+  if (user.role === 'manager' && user.departmentId) {
+    filter.departmentId = oid(user.departmentId)
+  }
+  const users = await User.find(filter).select('name role departmentId').lean()
+  const userMap = new Map(users.map((u) => [String(u._id), u]))
+  const userIds = users.map((u) => u._id)
+
+  const startDateKey = pktDateKey(new Date(Date.now() - days * 86_400_000))
+  const docs = await Attendance.find({
+    userId: { $in: userIds },
+    date: { $gte: startDateKey },
+  })
+    .sort({ date: -1, checkInAt: -1 })
+    .lean()
+
+  const departments = await DepartmentModel.find().lean()
+  const deptMap = new Map(departments.map((d) => [String(d._id), d.code]))
+
+  const todayCheckedInUserIds = new Set(
+    docs.filter((d) => d.date === todayKey && (d.status === 'checked_in' || d.status === 'on_break')).map((d) => String(d.userId)),
+  )
+  const todayAttendanceUserIds = new Set(
+    docs.filter((d) => d.date === todayKey && d.status !== 'checked_out').map((d) => String(d.userId)),
+  )
+
+  const missingCheckInsToday = users
+    .filter((u) => (u.role === 'agent' || u.role === 'field_agent') && !todayAttendanceUserIds.has(String(u._id)))
+    .map((u) => ({ id: String(u._id), name: u.name, role: u.role }))
+
+  let missingCheckOutsCount = 0
+
+  const records: AttendanceHistoryRecord[] = docs.map((doc) => {
+    const u = userMap.get(String(doc.userId))
+    const isPastDate = doc.date < todayKey
+    const missingCheckOut = (doc.status === 'checked_in' && isPastDate) || (!doc.checkOutAt && isPastDate)
+    if (missingCheckOut) missingCheckOutsCount++
+
+    let durationText = '—'
+    if (doc.checkInAt) {
+      const end = doc.checkOutAt ? new Date(doc.checkOutAt) : isPastDate ? null : new Date()
+      if (end) {
+        const diffMs = Math.max(0, end.getTime() - new Date(doc.checkInAt).getTime())
+        const hours = Math.floor(diffMs / 3_600_000)
+        const mins = Math.floor((diffMs % 3_600_000) / 60_000)
+        durationText = `${hours}h ${mins}m`
+      }
+    }
+
+    return {
+      id: String(doc._id),
+      userId: String(doc.userId),
+      userName: u?.name ?? 'Unknown',
+      userRole: u?.role ?? 'staff',
+      departmentCode: u?.departmentId ? (deptMap.get(String(u.departmentId)) as string) ?? null : null,
+      date: doc.date,
+      status: doc.status as AttendanceHistoryRecord['status'],
+      checkInAt: doc.checkInAt ? doc.checkInAt.toISOString() : null,
+      checkOutAt: doc.checkOutAt ? doc.checkOutAt.toISOString() : null,
+      durationText,
+      missingCheckOut,
+    }
+  })
+
+  return {
+    records,
+    missingCheckInsToday,
+    missingCheckOutsCount,
+    checkedInTodayCount: todayCheckedInUserIds.size,
+    totalEmployeesCount: users.length,
+  }
 }

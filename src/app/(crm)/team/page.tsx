@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, BadgeCheck, ListOrdered, UserCheck, UserPlus, Users } from 'lucide-react'
+import { ArrowDown, ArrowUp, BadgeCheck, CalendarCheck, ListOrdered, UserCheck, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
 import { CheckboxField, TextField } from '@/components/common/fields'
@@ -9,11 +9,12 @@ import { SectionCard } from '@/components/common/section-card'
 import { EmptyState } from '@/components/common/states'
 import { StatusBadge } from '@/components/common/status-badge'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
+import { TeamAttendanceSection } from '@/components/crm/team-attendance-section'
 import { DEPARTMENT_META } from '@/domain/ui-maps'
 import { requireRole } from '@/server/auth/session'
 import { bulkReassignAction, moveTeamMemberAction, setAutoLeadsAction, setTeamMemberAction, updateTeamSettingsAction } from '@/server/actions'
 import { PingAgent } from '@/components/crm/ping-agent'
-import { getTeamBoard, getTeams, listUsers } from '@/server/services/queries'
+import { getTeamAttendanceHistory, getTeamBoard, getTeams, listUsers } from '@/server/services/queries'
 import { RolesSection, UsersSection } from '@/components/crm/users-section'
 import { ROLE_META } from '@/domain/ui-maps'
 
@@ -21,6 +22,7 @@ export const metadata = { title: 'Team' }
 
 const SECTIONS = [
   { key: 'working', title: 'Who is working now', description: 'Who is checked in, their open leads; ping someone or give their leads to others.', icon: Users },
+  { key: 'attendance', title: 'Attendance history', description: 'Check & balance: exact check-in/out times, hours worked, and alerts for missing check-in/out.', icon: CalendarCheck },
   { key: 'members', title: 'Who gets leads', description: 'Turn “Gets leads automatically” on or off for each employee.', icon: UserCheck },
   { key: 'order', title: 'Lead order & timings', description: 'The turn order for new leads, accept / call time limits, pause auto-assign.', icon: ListOrdered },
   { key: 'add', title: 'Add a team member', description: 'Add people with a built-in or custom role; see and manage everyone.', icon: UserPlus },
@@ -33,7 +35,12 @@ export default async function TeamPage(props: PageProps<'/team'>) {
   const canManageTeam = user.role !== 'marketing'
   const sp = await props.searchParams
   const open = SECTIONS.find((x) => x.key === sp.section)
-  const [teams, board, people] = await Promise.all([getTeams(user), getTeamBoard(user), listUsers(user)])
+  const [teams, board, people, attendanceReport] = await Promise.all([
+    getTeams(user),
+    getTeamBoard(user),
+    listUsers(user),
+    getTeamAttendanceHistory(user, 14),
+  ])
   const inOrder = new Set(teams.flatMap((t) => t.members.map((m: { id: string }) => m.id)))
   const employees = people.filter((p) => (p.role === 'agent' || p.role === 'field_agent' || p.role === 'staff' || p.role === 'marketing') && p.isActive)
   const now = new Date()
@@ -43,11 +50,18 @@ export default async function TeamPage(props: PageProps<'/team'>) {
     const checkedIn = board.filter((m) => m.attendance === 'checked_in').length
     const badges: Record<string, { badge: string; badgeTone: 'ok' | 'warn' | 'plain' }> = {
       working: { badge: `${checkedIn} of ${board.length} checked in`, badgeTone: checkedIn ? 'ok' : 'warn' },
+      attendance: {
+        badge:
+          attendanceReport.missingCheckInsToday.length > 0
+            ? `${attendanceReport.missingCheckInsToday.length} missing check-in`
+            : `${attendanceReport.checkedInTodayCount} on duty`,
+        badgeTone: attendanceReport.missingCheckInsToday.length > 0 ? 'warn' : 'ok',
+      },
       members: { badge: `${employees.filter((e) => inOrder.has(e.id)).length} get leads`, badgeTone: 'plain' },
       order: teams.some((t) => t.settings.paused) ? { badge: 'Auto-assign paused', badgeTone: 'warn' } : { badge: 'Auto-assign on', badgeTone: 'ok' },
       add: { badge: `${people.filter((p) => p.isActive).length} people`, badgeTone: 'plain' },
     }
-    const visibleSections = canManageTeam ? SECTIONS : SECTIONS.filter((x) => x.key === 'working' || x.key === 'members' || x.key === 'order')
+    const visibleSections = canManageTeam ? SECTIONS : SECTIONS.filter((x) => x.key === 'working' || x.key === 'attendance' || x.key === 'members' || x.key === 'order')
     return (
       <>
         <PageHeader title="Team" description="Pick what you want to see or change." />
@@ -204,6 +218,7 @@ export default async function TeamPage(props: PageProps<'/team'>) {
       </SectionCard>
         </>
       ) : null}
+      {open.key === 'attendance' ? <TeamAttendanceSection report={attendanceReport} /> : null}
       {open.key === 'add' && canManageTeam ? <UsersSection user={user} /> : null}
       {open.key === 'roles' && canManageTeam ? <RolesSection user={user} /> : null}
     </>

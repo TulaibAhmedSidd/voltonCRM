@@ -111,7 +111,7 @@ const notificationSchema = new Schema(
   { timestamps: true },
 )
 notificationSchema.index({ userId: 1, readAt: 1, createdAt: -1 })
-notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 90 * DAY_SECONDS })
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 1 * DAY_SECONDS })
 
 const pushSubscriptionSchema = new Schema(
   {

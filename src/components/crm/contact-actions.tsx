@@ -5,8 +5,9 @@ import { Camera, Info, Loader2, MessageCircle, Phone, PhoneCall, Undo2 } from 'l
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { ActionForm } from '@/components/common/action-form'
-import { CheckboxField, TextAreaField, TextField } from '@/components/common/fields'
+import { CheckboxField, SelectField, TextAreaField, TextField } from '@/components/common/fields'
 import { CALL_RESULTS, CUSTOMER_RESPONSES, MAX_FOLLOW_UPS, type AttemptChannel, type CallResult, type CustomerResponse } from '@/domain/constants'
+import { PAKISTANI_CITIES } from '@/domain/cities'
 import type { PendingTap } from '@/domain/view-models'
 import { ATTEMPT_CHANNEL_META, CALL_RESULT_META, CUSTOMER_RESPONSE_META } from '@/domain/ui-maps'
 import { formatDuration } from '@/lib/duration'
@@ -43,13 +44,14 @@ export interface ContactActionsProps {
   /** Last saved result, e.g. "No answer · Mon 11:02". */
   lastResult: string | null
   stageLabel: string
+  leadCity?: string
 }
 
 /**
  * Proof of work: tap (logged on the server) → WhatsApp / dialer → back in the app → "What happened?".
  * The sheet explains why it opened, which try this is and what happens next.
  */
-export function ContactActions({ leadId, leadName, leadNo, attemptCount, pending, lastResult, stageLabel }: ContactActionsProps) {
+export function ContactActions({ leadId, leadName, leadNo, attemptCount, pending, lastResult, stageLabel, leadCity }: ContactActionsProps) {
   const [tap, setTap] = useState<{ id: string; channel: AttemptChannel; at: number } | null>(pending ? { id: pending.id, channel: pending.channel, at: new Date(pending.tappedAt).getTime() } : null)
   const [open, setOpen] = useState(!!pending)
   const [reason, setReason] = useState<'back' | 'pending' | 'second_tap' | 'desktop'>(pending ? 'pending' : 'back')
@@ -191,7 +193,7 @@ export function ContactActions({ leadId, leadName, leadNo, attemptCount, pending
                   <dd className="text-sm font-semibold">{stageLabel}</dd>
                 </div>
               </dl>
-              <OutcomeForm attemptId={tap.id} attemptCount={attemptCount} times={times} onDone={finish} />
+              <OutcomeForm attemptId={tap.id} attemptCount={attemptCount} times={times} leadCity={leadCity} onDone={finish} />
               <ActionForm action={cancelAttemptAction} onSuccess={finish} className="border-t border-border pt-3 pb-6">
                 <input type="hidden" name="attemptId" value={tap.id} />
                 {times.left ? <input type="hidden" name="leftAt" value={times.left} /> : null}
@@ -228,7 +230,7 @@ function nextPreview(result: CallResult | '', response: CustomerResponse | '', a
   return null
 }
 
-function OutcomeForm({ attemptId, attemptCount, times, onDone }: { attemptId: string; attemptCount: number; times: Times; onDone: () => void }) {
+function OutcomeForm({ attemptId, attemptCount, times, leadCity, onDone }: { attemptId: string; attemptCount: number; times: Times; leadCity?: string; onDone: () => void }) {
   const [result, setResult] = useState<CallResult | ''>('')
   const [response, setResponse] = useState<CustomerResponse | ''>('')
   const [upload, setUpload] = useState<{ publicId: string; name: string; mime: string; size: number } | null>(null)
@@ -306,6 +308,13 @@ function OutcomeForm({ attemptId, attemptCount, times, onDone }: { attemptId: st
       {result ? (
         <>
           <p className="text-sm font-semibold">{result === 'connected' ? 'Step 3' : 'Step 2'} · Note</p>
+          <SelectField
+            label="Customer city"
+            name="city"
+            defaultValue={leadCity ?? ''}
+            placeholder="Select customer city (optional)"
+            options={PAKISTANI_CITIES.map((c) => ({ value: c, label: c }))}
+          />
           <TextAreaField
             label={closing ? 'What did the customer say? (required — your manager reads it)' : 'Short note (optional)'}
             name="remarks"
@@ -336,14 +345,25 @@ function OutcomeForm({ attemptId, attemptCount, times, onDone }: { attemptId: st
   )
 }
 
-/** Shrink photos on the phone (~1280 px, JPEG 0.7 ≈ 150 KB) so the free Cloudinary plan lasts. */
+/** Shrink photos on the phone (~1600 px, WebP/JPEG 0.82 ≈ 120-180 KB) with crisp text for call/WhatsApp proof. */
 async function compressImage(file: File): Promise<Blob> {
   if (!file.type.startsWith('image/')) return file
   const bitmap = await createImageBitmap(file)
-  const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height))
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height))
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(bitmap.width * scale)
   canvas.height = Math.round(bitmap.height * scale)
-  canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-  return new Promise((resolve) => canvas.toBlob((b) => resolve(b ?? file), 'image/jpeg', 0.7))
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return file
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+  return new Promise((resolve) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob && blob.size < file.size) resolve(blob)
+        else canvas.toBlob((b) => resolve(b ?? file), 'image/jpeg', 0.8)
+      },
+      'image/webp',
+      0.82,
+    )
+  })
 }

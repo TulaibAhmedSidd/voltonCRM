@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { pushState, turnOffPush, turnOnPush, type PushState } from '@/lib/push-client'
 import { markNotificationsReadAction } from '@/server/actions'
+import { usePollInterval } from '@/lib/poll-interval'
 import { cn } from '@/lib/utils'
 
 interface Item {
@@ -29,7 +30,7 @@ interface Toast {
 const TOAST_MS = 8000
 
 /**
- * The bell: unread alerts (checked every 30 s while the screen is visible, and at once when a push arrives),
+ * The bell: unread alerts (checked according to configured interval while the screen is visible, and at once when a push arrives),
  * a pop-up toast for every NEW alert, and the switch for phone / PC notifications (Web Push).
  */
 export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
@@ -37,6 +38,7 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [push, setPush] = useState<PushState | null>(null)
   const [pushMsg, setPushMsg] = useState('')
+  const [pollIntervalSec] = usePollInterval()
   const seen = useRef<Set<string> | null>(null)
 
   const showToasts = useCallback((items: Toast[]) => {
@@ -59,10 +61,13 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
   useEffect(() => {
     // Only while the screen is visible: a phone in a pocket or a background tab makes no calls (push covers those).
     let id: ReturnType<typeof setInterval> | undefined
+    const intervalMs = pollIntervalSec * 1000
     const start = () => {
       if (id || document.visibilityState !== 'visible') return
       void load()
-      id = setInterval(load, 30_000)
+      if (intervalMs > 0) {
+        id = setInterval(load, intervalMs)
+      }
     }
     const stop = () => {
       clearInterval(id)
@@ -82,7 +87,7 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
       document.removeEventListener('visibilitychange', onVisibility)
       navigator.serviceWorker?.removeEventListener('message', onSwMessage)
     }
-  }, [load])
+  }, [load, pollIntervalSec])
 
   async function togglePush() {
     setPushMsg('')

@@ -317,6 +317,13 @@ export const en = {
     checkedInHint: 'New leads can reach you.',
     visitsNotCheckedIn: 'Check in when you start your field work — new visits go to checked-in field agents first.',
     visitsCheckedIn: 'New site visits can reach you.',
+    bannerNotCheckedInTitle: 'You are not checked in today',
+    bannerNotCheckedInDesc: 'You are currently offline. New customer leads and site visits will not be assigned to you until you check in.',
+    bannerCheckInNow: 'Check in now',
+    bannerCheckedInTitle: 'Shift active',
+    bannerCheckedInDesc: (time: string) => `Checked in at ${time}. Remember to check out when your shift ends.`,
+    bannerOnBreakDesc: 'You are currently on break. Lead distribution is paused.',
+    resumeShift: 'Resume shift',
   },
   team: {
     openLeads: (n: number) => `${n} open`,

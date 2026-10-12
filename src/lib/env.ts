@@ -9,6 +9,9 @@ const serverEnvSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
+  CLOUDINARY_CLOUD_NAME_NEW: z.string().optional(),
+  CLOUDINARY_API_KEY_NEW: z.string().optional(),
+  CLOUDINARY_API_SECRET_NEW: z.string().optional(),
   CRON_SECRET: z.string().min(16).optional(),
   WHATSAPP_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
@@ -35,7 +38,11 @@ export type ServerEnv = z.infer<typeof serverEnvSchema>
 
 /** Parse an env-like object. Empty strings count as "not set". Throws one readable error listing every problem. */
 export function parseServerEnv(source: Record<string, string | undefined>): ServerEnv {
-  const cleaned = Object.fromEntries(Object.entries(source).filter(([, value]) => value !== ''))
+  const merged = { ...source }
+  if (merged.CLOUDINARY_CLOUD_NAME_NEW) merged.CLOUDINARY_CLOUD_NAME = merged.CLOUDINARY_CLOUD_NAME_NEW
+  if (merged.CLOUDINARY_API_KEY_NEW) merged.CLOUDINARY_API_KEY = merged.CLOUDINARY_API_KEY_NEW
+  if (merged.CLOUDINARY_API_SECRET_NEW) merged.CLOUDINARY_API_SECRET = merged.CLOUDINARY_API_SECRET_NEW
+  const cleaned = Object.fromEntries(Object.entries(merged).filter(([, value]) => value !== ''))
   const result = serverEnvSchema.safeParse(cleaned)
   if (!result.success) {
     const issues = result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; ')

@@ -94,6 +94,7 @@ export const attemptOutcomeInput = z
     closeLead: z.boolean().default(false),
     /** Sale value when the customer said YES (deal_won). */
     wonValuePkr: z.number().int().min(1, 'Enter the sale value').max(1_000_000_000).optional(),
+    city: optionalText(80),
     leftAt: z.coerce.date().optional(),
     returnedAt: z.coerce.date().optional(),
   })

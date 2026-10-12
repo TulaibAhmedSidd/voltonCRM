@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { ActionForm } from '@/components/common/action-form'
 import { SelectField, TextAreaField, TextField } from '@/components/common/fields'
 import { DEPARTMENTS, LEAD_CHANNELS } from '@/domain/constants'
+import { PAKISTANI_CITIES } from '@/domain/cities'
 import { CHANNEL_META, DEPARTMENT_META } from '@/domain/ui-maps'
 import { quickAddLeadAction } from '@/server/actions'
 
@@ -26,7 +27,7 @@ export function QuickAddLead({ defaultDepartment }: { defaultDepartment?: string
         <ActionForm action={quickAddLeadAction}>
           <TextField label="Customer name" name="name" required autoComplete="off" />
           <TextField label="Phone / WhatsApp" name="phone" required inputMode="tel" placeholder="0300 1234567" />
-          <TextField label="City" name="city" />
+          <SelectField label="City (optional)" name="city" placeholder="Select city" options={PAKISTANI_CITIES.map((c) => ({ value: c, label: c }))} />
           <SelectField label="Department" name="department" defaultValue={defaultDepartment ?? 'INSTALLATION'} options={DEPARTMENTS.map((d) => ({ value: d, label: DEPARTMENT_META[d].label }))} />
           <SelectField label="Source" name="channel" defaultValue="manual" options={LEAD_CHANNELS.filter((c) => c !== 'csv_import' && c !== 'meta_webhook').map((c) => ({ value: c, label: CHANNEL_META[c].label }))} />
           <TextField label="Campaign / ad (optional)" name="sourceDetail" />
