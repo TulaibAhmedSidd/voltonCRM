@@ -25,6 +25,7 @@ import { acceptLead, assignQueuedNow, autoAssign, checkIn, checkOut, drainQueue,
 import { cancelAttempt, logOutcome, reviewAttempt, tapAttempt } from '@/server/services/attempts'
 import { cancelJobs, errorState, logActivity, notify, oid, UserError, type ActionState } from '@/server/services/common'
 import { ingestLead } from '@/server/services/ingest'
+import { importLeadsFromSpreadsheet } from '@/server/services/excel-import'
 import { changeStage, deleteLeads, reopenLead, transferLead } from '@/server/services/leads'
 import { clear, hit, isBlocked } from '@/server/services/rate-limit'
 import { setSetting } from '@/server/services/settings'
@@ -827,6 +828,32 @@ export async function syncMetaLeadsAction(_prev: ActionState, fd: FormData): Pro
     if (r.alreadyInCrm) parts.push(`${r.alreadyInCrm} already in the CRM (skipped)`)
     if (r.failed) parts.push(`${r.failed} failed: ${r.errors.join('; ')}`)
     return { ok: !r.failed, message: parts.join(' · ') }
+  })
+}
+
+/** Leads page → Where leads come from: upload Excel / CSV with column validation and anti-duplicate check. */
+export async function importLeadsSpreadsheetAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const file = fd.get('file')
+    if (!file || !(file instanceof File) || file.size === 0) {
+      return { ok: false, message: 'Please select an Excel (.xlsx) or CSV (.csv) file to upload.' }
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      return { ok: false, message: 'File is too large (maximum 25 MB).' }
+    }
+    const buffer = Buffer.from(await file.arrayBuffer())
+    const res = await importLeadsFromSpreadsheet(actor, buffer, file.name)
+    await AuditLog.create({
+      entity: 'lead',
+      entityId: null,
+      action: 'import',
+      after: { filename: file.name, sheet: res.sheetName, created: res.created, duplicates: res.duplicates, invalid: res.invalid },
+      actorId: oid(actor.id),
+    })
+    refresh()
+    const summary = `Tab "${res.sheetName}": ${res.created} new lead(s) imported, ${res.duplicates} duplicate(s) skipped${res.invalid > 0 ? `, ${res.invalid} invalid row(s) skipped` : ''}.`
+    return { ok: true, message: summary }
   })
 }
 

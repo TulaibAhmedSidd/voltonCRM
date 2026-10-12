@@ -2,6 +2,8 @@
 
 Newest first. Each day: done · next · remaining.
 
+- [2026-10-13](2026-10-13/done.md) — Low-latency DB migration, 1-day notification TTL, shortened lead timeline, team attendance tracking with missing check-in/out alerts, agent shift warning banner, Cloudinary account switch to _NEW credentials, 36 images migrated, and dual-layer image compression in both projects.
+
 - [2026-10-09](2026-10-09/done.md) — Auto-assign fixed (self-healing queue, reasons, Assign now), step-by-step lead page, manager alerts + ping, Help page, delete / bulk delete leads, proof storage (size + clear by date).
 
 - [2026-10-08](2026-10-08/done.md) — Client feedback: managers connect their own Google Sheets, column guide + column-change guard, Sheet details pop-up, refresh buttons, easy usernames.
