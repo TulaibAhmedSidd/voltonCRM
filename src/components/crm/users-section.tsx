@@ -16,8 +16,8 @@ import { listJobRoles } from '@/server/services/work'
 
 /** Roles each viewer may create (server rule in actions.ts → creatableRoles). */
 function creatable(role: Role): Role[] {
-  if (role === 'super_admin') return ['manager', 'agent', 'field_agent', 'admin']
-  return ['agent', 'field_agent']
+  if (role === 'super_admin') return ['manager', 'marketing', 'agent', 'field_agent', 'admin']
+  return ['marketing', 'agent', 'field_agent']
 }
 
 /** Team page: add a person (built-in or custom role) and manage the people list. */

@@ -221,7 +221,7 @@ const INTERESTED_STAGES = ['interested', 'requirement_collected', 'site_survey',
  * Every call agent in the manager's scope is listed (also with 0 leads), plus anyone else who holds leads. `range` limits it to leads received in that period.
  */
 export async function employeeLeadStats(user: SessionUser, opts: { range?: { from?: Date; to?: Date }; personId?: string } = {}): Promise<EmployeeLeadStats[]> {
-  if (!(user.role === 'manager' || isAdminRole(user.role))) return []
+  if (!(user.role === 'manager' || isAdminRole(user.role) || user.role === 'marketing')) return []
   await connectDb()
   const now = new Date()
   const one = opts.personId && Types.ObjectId.isValid(opts.personId) ? oid(opts.personId) : null
@@ -256,7 +256,7 @@ export async function employeeLeadStats(user: SessionUser, opts: { range?: { fro
   const byId = new Map(groups.map((g) => [String(g._id), g]))
   const onDuty = new Set(duty.map((d) => String(d.userId)))
   const myDept = user.departmentId ? String(user.departmentId) : null
-  const workable = (p: { role: string; departmentId?: unknown }) => p.role === 'agent' && (isAdminRole(user.role) || String(p.departmentId ?? '') === myDept)
+  const workable = (p: { role: string; departmentId?: unknown }) => p.role === 'agent' && (isAdminRole(user.role) || user.role === 'marketing' || String(p.departmentId ?? '') === myDept)
   return people
     .filter((p) => byId.has(String(p._id)) || workable(p))
     .map((p) => {
@@ -288,7 +288,7 @@ export async function leadFilterOptions(user: SessionUser): Promise<{ agents: { 
   const [agents, forms, campaigns] = await Promise.all([
     user.role === 'agent'
       ? Promise.resolve([])
-      : User.find({ role: { $in: ['agent', 'field_agent'] }, deletedAt: null, ...(isAdminRole(user.role) ? {} : { departmentId: user.departmentId ? oid(user.departmentId) : null }) })
+      : User.find({ role: { $in: ['agent', 'field_agent'] }, deletedAt: null, ...(isAdminRole(user.role) || user.role === 'marketing' ? {} : { departmentId: user.departmentId ? oid(user.departmentId) : null }) })
           .select('name')
           .sort({ name: 1 })
           .lean(),
@@ -422,7 +422,11 @@ export async function getTeamBoard(user: SessionUser): Promise<TeamMemberView[]>
   await connectDb()
   const filter: Record<string, unknown> = { role: { $in: ['agent', 'field_agent'] }, isActive: true, deletedAt: null }
   if (user.role === 'manager') filter.departmentId = user.departmentId ? oid(user.departmentId) : null
-  const members = await User.find(filter).sort({ name: 1 }).lean()
+  const [members, departments] = await Promise.all([
+    User.find(filter).sort({ name: 1 }).lean(),
+    DepartmentModel.find().select('_id code').lean(),
+  ])
+  const deptCodeById = new Map(departments.map((d) => [String(d._id), d.code as Department]))
   const ids = members.map((m) => m._id)
   const [attendance, open, pending, last] = await Promise.all([
     Attendance.find({ userId: { $in: ids }, date: pktDateKey(new Date()) }).lean(),
@@ -442,6 +446,7 @@ export async function getTeamBoard(user: SessionUser): Promise<TeamMemberView[]>
     openLeads: o.get(String(m._id))?.n ?? 0,
     pendingAccept: p.get(String(m._id))?.n ?? 0,
     lastActionAt: iso(l.get(String(m._id))?.at),
+    departmentCode: m.departmentId ? deptCodeById.get(String(m.departmentId)) : undefined,
   }))
 }
 

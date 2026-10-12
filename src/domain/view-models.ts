@@ -114,6 +114,7 @@ export interface TeamMemberView {
   openLeads: number
   pendingAccept: number
   lastActionAt?: string
+  departmentCode?: Department
 }
 
 export interface MessageView {

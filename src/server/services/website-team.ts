@@ -18,7 +18,7 @@ export interface WebsiteTeamMember {
   email: string | null
 }
 
-const RANK: Record<Role, number> = { super_admin: 0, admin: 1, manager: 2, agent: 3, field_agent: 3, staff: 3 }
+const RANK: Record<Role, number> = { super_admin: 0, admin: 1, manager: 2, agent: 3, field_agent: 3, staff: 3, marketing: 3 }
 
 /**
  * The team for the website's Team page, as a tree: employees → their manager (set on the person, else their

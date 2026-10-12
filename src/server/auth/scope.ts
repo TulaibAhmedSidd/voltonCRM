@@ -12,7 +12,9 @@ export const isAdminRole = (role: string) => role === 'admin' || role === 'super
 export function leadScope(user: SessionUser): Record<string, unknown> {
   const base = { deletedAt: null }
   if (isAdminRole(user.role)) return base
-  if (user.role === 'manager') return { ...base, departmentId: user.departmentId ? new Types.ObjectId(user.departmentId) : null }
+  if (user.role === 'manager' || user.role === 'marketing') {
+    return user.departmentId ? { ...base, departmentId: new Types.ObjectId(user.departmentId) } : base
+  }
   return { ...base, 'assignment.agentId': new Types.ObjectId(user.id) }
 }
 
@@ -28,7 +30,7 @@ export function visitScope(user: SessionUser): Record<string, unknown> {
 /** Users a person may see/manage. */
 export function userScope(user: SessionUser): Record<string, unknown> {
   const base = { deletedAt: null }
-  if (isAdminRole(user.role)) return base
+  if (isAdminRole(user.role) || user.role === 'marketing') return base
   if (user.role === 'manager') return { ...base, departmentId: user.departmentId ? new Types.ObjectId(user.departmentId) : null }
   return { ...base, _id: new Types.ObjectId(user.id) }
 }

@@ -29,12 +29,13 @@ const SECTIONS = [
 
 /** Team: a card per section; tapping a card opens only that section (?section=…), with a way back. */
 export default async function TeamPage(props: PageProps<'/team'>) {
-  const user = await requireRole('admin', 'manager')
+  const user = await requireRole('admin', 'manager', 'marketing')
+  const canManageTeam = user.role !== 'marketing'
   const sp = await props.searchParams
   const open = SECTIONS.find((x) => x.key === sp.section)
   const [teams, board, people] = await Promise.all([getTeams(user), getTeamBoard(user), listUsers(user)])
   const inOrder = new Set(teams.flatMap((t) => t.members.map((m: { id: string }) => m.id)))
-  const employees = people.filter((p) => (p.role === 'agent' || p.role === 'field_agent' || p.role === 'staff') && p.isActive)
+  const employees = people.filter((p) => (p.role === 'agent' || p.role === 'field_agent' || p.role === 'staff' || p.role === 'marketing') && p.isActive)
   const now = new Date()
   const callAgents = board.filter((m) => m.role === 'agent')
 
@@ -46,11 +47,12 @@ export default async function TeamPage(props: PageProps<'/team'>) {
       order: teams.some((t) => t.settings.paused) ? { badge: 'Auto-assign paused', badgeTone: 'warn' } : { badge: 'Auto-assign on', badgeTone: 'ok' },
       add: { badge: `${people.filter((p) => p.isActive).length} people`, badgeTone: 'plain' },
     }
+    const visibleSections = canManageTeam ? SECTIONS : SECTIONS.filter((x) => x.key === 'working' || x.key === 'members' || x.key === 'order')
     return (
       <>
         <PageHeader title="Team" description="Pick what you want to see or change." />
-        <HashToSection keys={SECTIONS.map((x) => x.key)} />
-        <SectionHub label="Team sections" items={SECTIONS.map((x) => ({ key: x.key, title: x.title, description: x.description, icon: x.icon, href: `/team?section=${x.key}`, ...badges[x.key] }))} />
+        <HashToSection keys={visibleSections.map((x) => x.key)} />
+        <SectionHub label="Team sections" items={visibleSections.map((x) => ({ key: x.key, title: x.title, description: x.description, icon: x.icon, href: `/team?section=${x.key}`, ...badges[x.key] }))} />
       </>
     )
   }
@@ -74,7 +76,7 @@ export default async function TeamPage(props: PageProps<'/team'>) {
                     </span>
                     {p.role === 'field_agent' ? (
                       <StatusBadge label="Gets site visits automatically" tone="installation" size="sm" />
-                    ) : (
+                    ) : canManageTeam ? (
                       <ActionForm action={setAutoLeadsAction} className="flex items-center gap-2">
                         <input type="hidden" name="userId" value={p.id} />
                         <input type="hidden" name="on" value={on ? 'false' : 'true'} />
@@ -83,6 +85,8 @@ export default async function TeamPage(props: PageProps<'/team'>) {
                           {on ? 'Turn off' : 'Turn on'}
                         </Button>
                       </ActionForm>
+                    ) : (
+                      <StatusBadge label={on ? 'Gets leads automatically' : 'No new leads'} tone={on ? 'success' : 'neutral'} size="sm" />
                     )}
                   </li>
                 )
@@ -108,28 +112,32 @@ export default async function TeamPage(props: PageProps<'/team'>) {
                     {m.name}
                     {team.lastUid === m.id ? <span className="ms-2 text-xs text-muted-foreground">(got the last lead)</span> : null}
                   </span>
-                  <form action={moveTeamMemberAction}>
-                    <input type="hidden" name="teamId" value={team.id} />
-                    <input type="hidden" name="userId" value={m.id} />
-                    <Button type="submit" name="direction" value="up" variant="ghost" size="icon-touch" aria-label={`Move ${m.name} up`} disabled={i === 0}>
-                      <ArrowUp />
-                    </Button>
-                    <Button type="submit" name="direction" value="down" variant="ghost" size="icon-touch" aria-label={`Move ${m.name} down`} disabled={i === team.members.length - 1}>
-                      <ArrowDown />
-                    </Button>
-                  </form>
-                  <form action={setTeamMemberAction}>
-                    <input type="hidden" name="teamId" value={team.id} />
-                    <input type="hidden" name="userId" value={m.id} />
-                    <input type="hidden" name="member" value="false" />
-                    <Button type="submit" variant="ghost" size="touch">
-                      Remove
-                    </Button>
-                  </form>
+                  {canManageTeam ? (
+                    <>
+                      <form action={moveTeamMemberAction}>
+                        <input type="hidden" name="teamId" value={team.id} />
+                        <input type="hidden" name="userId" value={m.id} />
+                        <Button type="submit" name="direction" value="up" variant="ghost" size="icon-touch" aria-label={`Move ${m.name} up`} disabled={i === 0}>
+                          <ArrowUp />
+                        </Button>
+                        <Button type="submit" name="direction" value="down" variant="ghost" size="icon-touch" aria-label={`Move ${m.name} down`} disabled={i === team.members.length - 1}>
+                          <ArrowDown />
+                        </Button>
+                      </form>
+                      <form action={setTeamMemberAction}>
+                        <input type="hidden" name="teamId" value={team.id} />
+                        <input type="hidden" name="userId" value={m.id} />
+                        <input type="hidden" name="member" value="false" />
+                        <Button type="submit" variant="ghost" size="touch">
+                          Remove
+                        </Button>
+                      </form>
+                    </>
+                  ) : null}
                 </li>
               ))}
             </ol>
-            {callAgents.filter((a) => !team.members.some((m: { id: string }) => m.id === a.id)).length ? (
+            {canManageTeam && callAgents.filter((a) => !team.members.some((m: { id: string }) => m.id === a.id)).length ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {callAgents
                   .filter((a) => !team.members.some((m: { id: string }) => m.id === a.id))
@@ -146,24 +154,26 @@ export default async function TeamPage(props: PageProps<'/team'>) {
               </div>
             ) : null}
           </SectionCard>
-          <SectionCard title="Timings">
-            <ActionForm action={updateTeamSettingsAction}>
-              <input type="hidden" name="teamId" value={team.id} />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <TextField label="Manager window (min, 0 = auto at once)" name="managerWindowMin" type="number" min={0} max={60} defaultValue={team.settings.managerWindowMin} />
-                <TextField label="Agent must accept within (min)" name="acceptWithinMin" type="number" min={1} max={120} defaultValue={team.settings.acceptWithinMin} />
-                <TextField label="First call/WhatsApp within (min)" name="contactWithinMin" type="number" min={5} max={240} defaultValue={team.settings.contactWithinMin} />
-                <TextField label="Max leads waiting to accept, per agent" name="maxPendingAccept" type="number" min={1} max={20} defaultValue={team.settings.maxPendingAccept} />
-              </div>
-              <CheckboxField label="If not accepted in time, move the lead to the next agent" name="autoMoveOnAcceptTimeout" defaultChecked={team.settings.autoMoveOnAcceptTimeout} />
-              <CheckboxField label="Give new leads only to agents who are checked in (recommended)" name="requireCheckIn" defaultChecked={team.settings.requireCheckIn} />
-              <CheckboxField label="Give out leads at night / on holidays too (otherwise they wait for office hours)" name="assignOutsideHours" defaultChecked={team.settings.assignOutsideHours} />
-              <CheckboxField label="Pause auto-assign (manager assigns everything)" name="paused" defaultChecked={team.settings.paused} />
-              <Button type="submit" size="touch">
-                Save timings
-              </Button>
-            </ActionForm>
-          </SectionCard>
+          {canManageTeam ? (
+            <SectionCard title="Timings">
+              <ActionForm action={updateTeamSettingsAction}>
+                <input type="hidden" name="teamId" value={team.id} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <TextField label="Manager window (min, 0 = auto at once)" name="managerWindowMin" type="number" min={0} max={60} defaultValue={team.settings.managerWindowMin} />
+                  <TextField label="Agent must accept within (min)" name="acceptWithinMin" type="number" min={1} max={120} defaultValue={team.settings.acceptWithinMin} />
+                  <TextField label="First call/WhatsApp within (min)" name="contactWithinMin" type="number" min={5} max={240} defaultValue={team.settings.contactWithinMin} />
+                  <TextField label="Max leads waiting to accept, per agent" name="maxPendingAccept" type="number" min={1} max={20} defaultValue={team.settings.maxPendingAccept} />
+                </div>
+                <CheckboxField label="If not accepted in time, move the lead to the next agent" name="autoMoveOnAcceptTimeout" defaultChecked={team.settings.autoMoveOnAcceptTimeout} />
+                <CheckboxField label="Give new leads only to agents who are checked in (recommended)" name="requireCheckIn" defaultChecked={team.settings.requireCheckIn} />
+                <CheckboxField label="Give out leads at night / on holidays too (otherwise they wait for office hours)" name="assignOutsideHours" defaultChecked={team.settings.assignOutsideHours} />
+                <CheckboxField label="Pause auto-assign (manager assigns everything)" name="paused" defaultChecked={team.settings.paused} />
+                <Button type="submit" size="touch">
+                  Save timings
+                </Button>
+              </ActionForm>
+            </SectionCard>
+          ) : null}
         </div>
       ))}
         </>
@@ -180,7 +190,7 @@ export default async function TeamPage(props: PageProps<'/team'>) {
                 <TeamMemberRow member={m} now={now} />
               </div>
               <PingAgent agentId={m.id} agentName={m.name} />
-              {m.openLeads > 0 ? (
+              {canManageTeam && m.openLeads > 0 ? (
                 <form action={bulkReassignAction}>
                   <input type="hidden" name="fromAgentId" value={m.id} />
                   <Button type="submit" variant="outline" size="touch">
@@ -194,8 +204,8 @@ export default async function TeamPage(props: PageProps<'/team'>) {
       </SectionCard>
         </>
       ) : null}
-      {open.key === 'add' ? <UsersSection user={user} /> : null}
-      {open.key === 'roles' ? <RolesSection user={user} /> : null}
+      {open.key === 'add' && canManageTeam ? <UsersSection user={user} /> : null}
+      {open.key === 'roles' && canManageTeam ? <RolesSection user={user} /> : null}
     </>
   )
 }

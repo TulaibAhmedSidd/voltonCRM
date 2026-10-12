@@ -4,7 +4,7 @@ import { ActionForm } from '@/components/common/action-form'
 import { StatusBadge } from '@/components/common/status-badge'
 import type { Department, Role } from '@/domain/constants'
 import { ROLE_META } from '@/domain/ui-maps'
-import { deleteUserAction, resetPasswordAction, setUserActiveAction, setWebsiteAccessAction } from '@/server/actions'
+import { deleteUserAction, resetPasswordAction, setUserActiveAction, setWebsiteAccessAction, updateUserAction } from '@/server/actions'
 import { WEBSITE_ACCESS, WEBSITE_ACCESS_LABEL, websiteAccessEditable, type WebsiteAccess } from '@/domain/website'
 
 export interface AdminListUser {
@@ -15,14 +15,15 @@ export interface AdminListUser {
   role: Role
   department: Department | null
   isActive: boolean
+  jobTitle?: string | null
   /** voltonsolar.com admin access (what applies now, default or chosen). */
   websiteAccess?: WebsiteAccess
 }
 
-/** Which roles the viewer may deactivate / reset / remove (mirrors the server rules in actions.ts). */
+/** Which roles the viewer may deactivate / reset / remove / edit (mirrors the server rules in actions.ts). */
 export function manageableRoles(viewer: Role): Role[] {
-  if (viewer === 'super_admin') return ['admin', 'manager', 'agent', 'field_agent']
-  if (viewer === 'admin' || viewer === 'manager') return ['agent', 'field_agent']
+  if (viewer === 'super_admin') return ['admin', 'manager', 'agent', 'field_agent', 'staff', 'marketing']
+  if (viewer === 'admin' || viewer === 'manager') return ['agent', 'field_agent', 'staff', 'marketing']
   return []
 }
 
@@ -39,6 +40,7 @@ export function UserAdminList({ users, viewer }: { users: AdminListUser[]; viewe
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">
                 {u.name} <span className="text-xs text-muted-foreground">@{u.username}</span>
+                {u.jobTitle ? <span className="ms-1.5 text-xs text-muted-foreground">({u.jobTitle})</span> : null}
               </p>
               <p className="text-xs text-muted-foreground">{[u.department, u.phone].filter(Boolean).join(' · ')}</p>
             </div>
@@ -76,28 +78,49 @@ export function UserAdminList({ users, viewer }: { users: AdminListUser[]; viewe
             ) : null}
             {canManage ? (
               <details className="w-full">
-                <summary className="flex min-h-11 cursor-pointer items-center text-sm text-muted-foreground">Password / remove…</summary>
-                <div className="grid gap-3 pt-2 sm:grid-cols-2">
-                  <ActionForm action={resetPasswordAction}>
+                <summary className="flex min-h-11 cursor-pointer items-center text-sm text-muted-foreground">Edit / password / remove…</summary>
+                <div className="space-y-3 pt-2">
+                  <ActionForm action={updateUserAction} className="rounded-xl border border-border bg-card p-3 space-y-2">
                     <input type="hidden" name="userId" value={u.id} />
-                    <div className="flex gap-2">
-                      <div className="min-w-0 flex-1">
-                        <PasswordInput defaultVisible name="password" minLength={8} required aria-label="Temporary password" placeholder="Temporary password" autoComplete="off" />
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Edit {u.name}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground" htmlFor={`name-${u.id}`}>Full name</label>
+                        <input id={`name-${u.id}`} name="name" defaultValue={u.name} required className="h-11 w-full rounded-lg border border-input bg-card px-3 text-sm" />
                       </div>
-                      <Button type="submit" variant="outline" size="touch">
-                        Set
+                      <div>
+                        <label className="text-xs text-muted-foreground" htmlFor={`phone-${u.id}`}>Phone</label>
+                        <input id={`phone-${u.id}`} name="phone" defaultValue={u.phone} placeholder="0300 1234567" className="h-11 w-full rounded-lg border border-input bg-card px-3 text-sm" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <Button type="submit" size="touch">
+                        Save changes
                       </Button>
                     </div>
                   </ActionForm>
-                  <ActionForm action={deleteUserAction}>
-                    <input type="hidden" name="userId" value={u.id} />
-                    <div className="flex gap-2">
-                      <input name="confirm" required aria-label={`Type ${u.username} to confirm`} placeholder={`Type ${u.username}`} autoComplete="off" autoCapitalize="none" className="h-11 min-w-0 flex-1 rounded-lg border border-input bg-card px-3" />
-                      <Button type="submit" variant="destructive" size="touch">
-                        Remove
-                      </Button>
-                    </div>
-                  </ActionForm>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <ActionForm action={resetPasswordAction}>
+                      <input type="hidden" name="userId" value={u.id} />
+                      <div className="flex gap-2">
+                        <div className="min-w-0 flex-1">
+                          <PasswordInput defaultVisible name="password" minLength={8} required aria-label="Temporary password" placeholder="Temporary password" autoComplete="off" />
+                        </div>
+                        <Button type="submit" variant="outline" size="touch">
+                          Set
+                        </Button>
+                      </div>
+                    </ActionForm>
+                    <ActionForm action={deleteUserAction}>
+                      <input type="hidden" name="userId" value={u.id} />
+                      <div className="flex gap-2">
+                        <input name="confirm" required aria-label={`Type ${u.username} to confirm`} placeholder={`Type ${u.username}`} autoComplete="off" autoCapitalize="none" className="h-11 min-w-0 flex-1 rounded-lg border border-input bg-card px-3" />
+                        <Button type="submit" variant="destructive" size="touch">
+                          Remove
+                        </Button>
+                      </div>
+                    </ActionForm>
+                  </div>
                 </div>
               </details>
             ) : null}

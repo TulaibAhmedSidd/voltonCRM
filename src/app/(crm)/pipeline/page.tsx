@@ -12,7 +12,7 @@ export const metadata = { title: 'Pipeline' }
 
 /** Read-only Kanban per department (stages change from the lead page / outcome sheet). */
 export default async function PipelinePage(props: PageProps<'/pipeline'>) {
-  const user = await requireRole('admin', 'manager')
+  const user = await requireRole('admin', 'manager', 'marketing')
   const sp = await props.searchParams
   const department: Department =
     user.role === 'manager' && user.departmentCode ? user.departmentCode : (DEPARTMENTS.find((d) => d === sp.department) ?? 'INSTALLATION')
@@ -20,7 +20,7 @@ export default async function PipelinePage(props: PageProps<'/pipeline'>) {
   return (
     <>
       <PageHeader title="Pipeline" description="Each column is a stage. Tap a card to work the lead." />
-      {user.role === 'admin' ? (
+      {user.role === 'admin' || user.role === 'super_admin' || user.role === 'marketing' ? (
         <FilterBar>
           {DEPARTMENTS.map((d) => (
             <FilterChip key={d} label={DEPARTMENT_META[d].label} href={`/pipeline?department=${d}`} active={d === department} />

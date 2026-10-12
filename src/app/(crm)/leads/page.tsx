@@ -11,6 +11,7 @@ import { LeadDetailsDialog } from '@/components/crm/lead-details-dialog'
 import { LeadBulkActions, LeadSelectBox } from '@/components/crm/lead-bulk-actions'
 import { AssignmentBadge, DepartmentBadge, SourceBadge, StageBadge } from '@/components/crm/badges'
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
+import { AssignLeadDialog } from '@/components/crm/assign-lead-dialog'
 import { ActionForm } from '@/components/common/action-form'
 import { pullSheetAction } from '@/server/actions'
 import type { LeadSummary } from '@/domain/view-models'
@@ -18,7 +19,8 @@ import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone, maskPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
 import { ArrowLeft, List, Users } from 'lucide-react'
-import { LEAD_VIEWS, PAGE_SIZE, employeeLeadStats, getQueuePanels, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
+import { LEAD_VIEWS, PAGE_SIZE, employeeLeadStats, getQueuePanels, getTeamBoard, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
+import { en } from '@/i18n/en'
 import { DATE_PRESET_LABEL, activeFilterCount, parseLeadFilters, receivedRange, type DatePreset } from '@/domain/lead-filters'
 import { SectionBack, SectionHub } from '@/components/common/section-hub'
 import { EmployeeLeadList, EmployeeLeadNumbers, LeadProgressBar } from '@/components/crm/employee-lead-list'
@@ -52,7 +54,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
   const user = await requireUser()
   const sp = await props.searchParams
   const one = (k: string) => (typeof sp[k] === 'string' ? (sp[k] as string) : undefined)
-  const leader = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin'
+  const leader = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin' || user.role === 'marketing'
   const filters = parseLeadFilters(one)
 
   // Managers: /leads opens two cards — "Leads by employee" and "All leads".
@@ -63,10 +65,15 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
   const person = personId ? (await employeeLeadStats(user, { personId, range: receivedRange(filters) }))[0] : undefined
   const view = (LEAD_VIEWS as readonly string[]).includes(one('view') ?? '') ? (one('view') as LeadView) : user.role === 'agent' ? 'mine' : personId ? 'any' : 'all'
   const page = Number(one('page') ?? 1)
-  const [{ rows, total, counts }, filterOptions] = await Promise.all([
+  const canDelete = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin'
+  const canAssign = canDelete
+  const canExport = canDelete || user.role === 'marketing'
+  const [{ rows, total, counts }, filterOptions, teamBoard] = await Promise.all([
     listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc', filters, personId }),
     leadFilterOptions(user),
+    canAssign ? getTeamBoard(user) : Promise.resolve([]),
   ])
+  const assignableAgents = teamBoard.filter((m) => m.role === 'agent')
   const sources = user.role === 'agent' || personId ? [] : await leadSourcesStatus(user)
   const views = LEAD_VIEWS.filter((v) => !(v === 'mine' && user.role !== 'agent') && !(v === 'unassigned' && (user.role === 'agent' || personId)))
   const href = (params: Record<string, string | number | undefined>) => {
@@ -74,7 +81,6 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     for (const [k, v] of Object.entries({ person: personId, view, q: one('q'), sort: one('sort'), dir: one('dir'), ...filters, ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
     return `/leads?${q}`
   }
-  const canDelete = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin'
   const columns: Column<LeadSummary>[] = [
     ...(canDelete ? [{ key: 'select', header: '', cell: (l: LeadSummary) => <LeadSelectBox leadId={l.id} label={`${l.name} ${l.leadNo}`} /> }] : []),
     {
@@ -92,7 +98,28 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     { key: 'stage', header: 'Stage', cell: (l) => <StageBadge stage={l.stage} size="sm" /> },
     { key: 'dept', header: 'Dept', cell: (l) => <DepartmentBadge department={l.department} size="sm" /> },
     { key: 'source', header: 'Source', cell: (l) => <SourceBadge channel={l.channel} detail={l.sourceDetail} platform={l.platform} isAd={l.isAd} size="sm" /> },
-    { key: 'agent', header: 'Agent', cell: (l) => (l.agent ? l.agent.name : <AssignmentBadge state={l.assignmentState} size="sm" />) },
+    {
+      key: 'agent',
+      header: 'Agent',
+      cell: (l) => (
+        <div className="flex flex-col items-start gap-1 py-1">
+          {l.agent ? <span className="text-sm font-medium">{l.agent.name}</span> : <AssignmentBadge state={l.assignmentState} size="sm" />}
+          {canAssign && l.status === 'open' ? (
+            <AssignLeadDialog
+              leadId={l.id}
+              leadNo={l.leadNo}
+              customerName={l.name}
+              department={l.department}
+              currentAgentId={l.agent?.id}
+              agents={assignableAgents}
+              triggerLabel={l.agent ? en.lead.reassign : en.lead.assignToMember}
+              triggerVariant={l.agent ? 'ghost' : 'outline'}
+              triggerSize="xs"
+            />
+          ) : null}
+        </div>
+      ),
+    },
     { key: 'attempts', header: 'Attempts', sortable: true, align: 'end', cell: (l) => l.attemptCount },
     { key: 'followup', header: 'Next follow-up', sortable: true, cell: (l) => (l.nextFollowUpAt ? formatPktDateTime(new Date(l.nextFollowUpAt)) : '—') },
     { key: 'received', header: 'Received', sortable: true, cell: (l) => formatPktDateTime(new Date(l.receivedAt)) },
@@ -124,7 +151,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
                   </Button>
                 </ActionForm>
               ) : null}
-              <QuickAddLead defaultDepartment={user.departmentCode} />
+              {user.role !== 'marketing' ? <QuickAddLead defaultDepartment={user.departmentCode} /> : null}
             </div>
           )
         }
@@ -155,7 +182,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         showAgent={user.role !== 'agent' && !personId}
         showDepartment={user.role === 'admin' || user.role === 'super_admin'}
       />
-      {canDelete ? <ExportLeads filters={personId ? { ...filters, agent: personId } : filters} agents={filterOptions.agents} showDepartment={user.role === 'admin' || user.role === 'super_admin'} /> : null}
+      {canExport ? <ExportLeads filters={personId ? { ...filters, agent: personId } : filters} agents={filterOptions.agents} showDepartment={user.role === 'admin' || user.role === 'super_admin'} /> : null}
       {rows.length === 0 ? (
         activeFilterCount(filters) ? (
           <EmptyState title="No leads match these filters" description="Remove a filter above or press Clear all." />
@@ -168,8 +195,20 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
             {rows.map((l) => (
               <div key={l.id} className="flex items-start gap-2">
                 {canDelete ? <LeadSelectBox leadId={l.id} label={`${l.name} ${l.leadNo}`} /> : null}
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 space-y-2">
                   <LeadCard lead={l} href={`/leads/${l.id}`} showAgent={user.role !== 'agent'} />
+                  {canAssign && l.status === 'open' && !l.agent ? (
+                    <AssignLeadDialog
+                      leadId={l.id}
+                      leadNo={l.leadNo}
+                      customerName={l.name}
+                      department={l.department}
+                      agents={assignableAgents}
+                      triggerLabel={en.lead.assignToMember}
+                      triggerSize="touch"
+                      className="w-full"
+                    />
+                  ) : null}
                 </div>
                 <LeadDetailsDialog leadId={l.id} compact />
               </div>

@@ -65,6 +65,7 @@ export const ROLE_META: MetaMap<C.Role> = {
   agent: { label: en.role.agent, tone: 'neutral', icon: User },
   field_agent: { label: en.role.field_agent, tone: 'installation', icon: MapPin },
   staff: { label: en.role.staff, tone: 'neutral', icon: User },
+  marketing: { label: en.role.marketing, tone: 'warning', icon: Megaphone },
 }
 
 export const INSTRUCTION_STATUS_META: MetaMap<C.InstructionStatus> = {

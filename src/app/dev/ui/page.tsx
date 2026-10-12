@@ -21,6 +21,7 @@ import { AttemptCard } from '@/components/crm/attempt-card'
 import { FollowUpItem } from '@/components/crm/follow-up-item'
 import { CheckInCard } from '@/components/crm/check-in-card'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
+import { AssignLeadDialog } from '@/components/crm/assign-lead-dialog'
 import { MessageBubble } from '@/components/crm/message-bubble'
 import { KpiGrid } from '@/components/crm/kpi-grid'
 import { StageBadge, DepartmentBadge } from '@/components/crm/badges'
@@ -224,6 +225,31 @@ export default async function CatalogPage() {
               ))}
             </SectionCard>
           </div>
+          <SectionCard title="AssignLeadDialog" description="Modal dialog to assign or reassign leads">
+            <div className="flex flex-wrap items-center gap-3">
+              <AssignLeadDialog
+                leadId={fx.leads[0].id}
+                leadNo={fx.leads[0].leadNo}
+                customerName={fx.leads[0].name}
+                department={fx.leads[0].department}
+                agents={fx.team.map((t) => ({ id: t.id, name: t.name, attendance: t.attendance }))}
+                triggerLabel={en.lead.assignToMember}
+                triggerVariant="outline"
+                triggerSize="touch"
+              />
+              <AssignLeadDialog
+                leadId={fx.leads[0].id}
+                leadNo={fx.leads[0].leadNo}
+                customerName={fx.leads[0].name}
+                department={fx.leads[0].department}
+                currentAgentId={fx.team[0].id}
+                agents={fx.team.map((t) => ({ id: t.id, name: t.name, attendance: t.attendance }))}
+                triggerLabel={en.lead.reassign}
+                triggerVariant="ghost"
+                triggerSize="touch"
+              />
+            </div>
+          </SectionCard>
           <SectionCard title="WhatsApp">
             <div className="space-y-2">
               {fx.messages.map((message) => (

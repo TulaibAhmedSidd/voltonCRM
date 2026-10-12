@@ -54,6 +54,7 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | NotificationBell (client) | notification-bell.tsx | — polls `/api/me/poll` every 20 s |
 | QuickAddLead (client) | quick-add-lead.tsx | — manual lead sheet |
 | LeadDetailsDialog (client) | lead-details-dialog.tsx | `leadId, label?, compact?` — "Sheet details" pop-up: source, form answers and every extra Sheet column (loads on open) |
+| AssignLeadDialog (client) | assign-lead-dialog.tsx | `leadId, leadNo, customerName, department?, currentAgentId?, agents, triggerLabel?, triggerVariant?, triggerSize?` — modal dialog to assign a lead to a team member |
 | SheetSources / SheetColumnGuide | sheet-sources.tsx | `sources, statusOf, isAdmin, defaultDepartment` — Settings → Google Sheets cards + the column rules |
 | NextStepCard / LeadJourney | lead-journey.tsx | `next` / `steps` from `leadJourney()` (src/domain/lead-journey.ts) — "what to do now" + Accept → Try 1–3 → Close → Manager check |
 | LeadBulkActions / LeadSelectBox (client) | lead-bulk-actions.tsx | — / `leadId, label` — managers tick leads → reason → confirm → soft delete (`deleteLeadsAction`) |

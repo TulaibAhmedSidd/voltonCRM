@@ -8,7 +8,8 @@
 /** agent = call agent (phone/WhatsApp); field_agent = outdoor site-visit agent (Excel "Visits" tab). */
 /** super_admin = owner: everything an admin can do + add/remove managers and admins. */
 /** staff = an employee with a custom role that does not work leads (gets work instructions only). */
-export const ROLES = ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff'] as const
+/** marketing = read-only pipeline and leads observer (leads by employee, sheets export, cannot edit/delete/sync). */
+export const ROLES = ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff', 'marketing'] as const
 export type Role = (typeof ROLES)[number]
 
 /** What a CRM user may do in the main website's admin (voltonsolar.com) — see src/domain/website.ts. */

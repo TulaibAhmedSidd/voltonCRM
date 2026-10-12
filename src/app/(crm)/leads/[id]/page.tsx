@@ -261,7 +261,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               icon: <History />,
               badge: `${activities.length} events`,
               content: <div className="space-y-4">
-          {(
+          {user.role !== 'marketing' ? (
             <form action={addNoteAction} className="flex gap-2">
               <input type="hidden" name="leadId" value={lead.id} />
               <input name="text" required maxLength={2000} aria-label="Add a note" placeholder="Add a note…" className="h-11 min-w-0 flex-1 rounded-lg border border-input bg-card px-3 text-base outline-none md:text-sm" />
@@ -269,7 +269,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
                 Add
               </SubmitButton>
             </form>
-          )}
+          ) : null}
           {activities.length === 0 ? (
             <EmptyState />
           ) : (

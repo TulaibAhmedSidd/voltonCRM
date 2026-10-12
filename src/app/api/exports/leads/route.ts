@@ -13,7 +13,7 @@ const ymd = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : unde
 export async function GET(request: NextRequest) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!['manager', 'admin', 'super_admin'].includes(user.role)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  if (!['manager', 'admin', 'super_admin', 'marketing'].includes(user.role)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   if ((await hit(`export:${user.id}`, 30, 10 * 60_000)).blocked) return NextResponse.json({ error: 'Too many downloads — wait a few minutes' }, { status: 429 })
 
   const p = request.nextUrl.searchParams

@@ -421,9 +421,9 @@ export async function reviewAttemptAction(_prev: ActionState, fd: FormData): Pro
 
 /** Who may create / remove which roles. Managers and admins are managed by the super admin only. */
 function creatableRoles(actor: SessionUser): Role[] {
-  if (actor.role === 'super_admin') return ['admin', 'manager', 'agent', 'field_agent']
-  if (actor.role === 'admin') return ['agent', 'field_agent']
-  if (actor.role === 'manager') return ['agent', 'field_agent']
+  if (actor.role === 'super_admin') return ['admin', 'manager', 'marketing', 'agent', 'field_agent']
+  if (actor.role === 'admin') return ['marketing', 'agent', 'field_agent']
+  if (actor.role === 'manager') return ['marketing', 'agent', 'field_agent']
   return []
 }
 
@@ -448,7 +448,7 @@ export async function createUserAction(_prev: ActionState, fd: FormData): Promis
     const problem = passwordProblem(data.password, data.username)
     if (problem) return { ok: false, message: problem, fieldErrors: { password: problem } }
     const departmentId = actor.role === 'manager' ? actor.departmentId : data.departmentId
-    if (data.role !== 'admin' && !departmentId) return { ok: false, message: 'Pick a department', fieldErrors: { departmentId: 'Required' } }
+    if (data.role !== 'admin' && data.role !== 'marketing' && !departmentId) return { ok: false, message: 'Pick a department', fieldErrors: { departmentId: 'Required' } }
     if (departmentId && !isObjectId(departmentId)) return { ok: false, message: 'Pick a department' }
     if (data.phone && !normalizePhone(data.phone)) return { ok: false, message: 'Phone number looks wrong — use 03XX XXXXXXX or +92…', fieldErrors: { phone: 'Invalid' } }
     const team = departmentId ? await Team.findOne({ departmentId: oid(departmentId) }) : null
@@ -463,7 +463,7 @@ export async function createUserAction(_prev: ActionState, fd: FormData): Promis
       departmentId: data.role === 'admin' ? null : departmentId ? oid(departmentId) : null,
       managerId: (data.role === 'agent' || data.role === 'field_agent') && team ? team.managerId : null,
       jobRoleId: job?.jobRoleId ?? null,
-      jobTitle: job?.jobTitle ?? null,
+      jobTitle: job?.jobTitle ?? (data.role === 'marketing' ? 'Marketing' : null),
       passwordHash: await hashPassword(data.password),
       // The person must choose their own password at first sign-in.
       mustChangePassword: true,
@@ -487,11 +487,55 @@ export async function createUserAction(_prev: ActionState, fd: FormData): Promis
   })
 }
 
-/** Which users an actor may deactivate / delete / reset. */
+/** Which users an actor may deactivate / delete / reset / edit. */
 async function loadUserForAdmin(actor: SessionUser, userId: unknown) {
   if (String(userId) === actor.id) throw new UserError('You cannot do this to your own account')
-  const roles: string[] = actor.role === 'super_admin' ? ['admin', 'manager', 'agent', 'field_agent'] : ['agent', 'field_agent']
+  const roles: string[] = actor.role === 'super_admin' ? ['admin', 'manager', 'agent', 'field_agent', 'staff', 'marketing'] : ['agent', 'field_agent', 'staff', 'marketing']
   return loadManagedUser(actor, userId, roles)
+}
+
+export async function updateUserAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async (): Promise<ActionState> => {
+    const target = await loadUserForAdmin(actor, fd.get('userId'))
+    const name = (str(fd, 'name') ?? '').replace(/\s+/g, ' ')
+    if (name.length < 2) return { ok: false, message: "Enter the person's full name", fieldErrors: { name: 'Required' } }
+    const phone = str(fd, 'phone')
+    if (phone && !normalizePhone(phone)) return { ok: false, message: 'Phone number looks wrong — use 03XX XXXXXXX or +92…', fieldErrors: { phone: 'Invalid' } }
+    const email = str(fd, 'email')?.toLowerCase()
+    if (email && !z.email().safeParse(email).success) return { ok: false, message: 'Email looks wrong', fieldErrors: { email: 'Invalid' } }
+    if (email && (await User.exists({ email, _id: { $ne: target._id } }))) return { ok: false, message: 'That email is already used by another user', fieldErrors: { email: 'Taken' } }
+
+    const rawRole = str(fd, 'role') ?? ''
+    const job = rawRole.startsWith('job:') ? await resolveJobRole(actor, rawRole.slice(4)) : null
+    let role = job ? job.role : z.enum(ROLES).safeParse(rawRole).data
+    if (!role) role = target.role as Role
+
+    const departmentId = str(fd, 'departmentId')
+    const updateDept = departmentId === 'none' ? null : departmentId && isObjectId(departmentId) ? oid(departmentId) : target.departmentId
+
+    const updates: Record<string, unknown> = {
+      name: name.slice(0, 80),
+      phone: phone ? (normalizePhone(phone) ?? undefined) : undefined,
+      email: email ?? target.email,
+      role,
+      departmentId: role === 'admin' ? null : updateDept,
+      jobRoleId: job ? job.jobRoleId : role === 'marketing' ? target.jobRoleId : null,
+      jobTitle: job ? job.jobTitle : role === 'marketing' ? 'Marketing' : (role === 'staff' ? target.jobTitle : null),
+    }
+
+    await User.updateOne({ _id: target._id }, { $set: updates })
+    await AuditLog.create({
+      entity: 'user',
+      entityId: target._id,
+      action: 'update',
+      before: { name: target.name, role: target.role, email: target.email, phone: target.phone },
+      after: updates,
+      actorId: oid(actor.id),
+    })
+    refresh()
+    return { ok: true, message: `${name} updated` }
+  })
 }
 
 /** Take an inactive/removed user's work back: open leads to the queue, visits to other field agents, timers off. */

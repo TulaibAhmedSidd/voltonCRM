@@ -46,15 +46,15 @@ export const WEBSITE_ACCESS_SINCE = new Date('2026-10-11T00:00:00+05:00')
 export function defaultWebsiteAccess(role: Role, jobTitle?: string | null, createdAt?: Date | string | null): WebsiteAccess {
   if (role === 'super_admin' || role === 'admin' || role === 'manager') return 'admin'
   if (createdAt && new Date(createdAt) < WEBSITE_ACCESS_SINCE) return 'admin'
-  if (role === 'agent' || /market/i.test(jobTitle ?? '')) return 'editor'
+  if (role === 'agent' || role === 'marketing' || /market/i.test(jobTitle ?? '')) return 'editor'
   return 'none'
 }
 
 /** Whose website access the viewer may change (never their own). */
 export function websiteAccessEditable(viewer: Role): Role[] {
-  if (viewer === 'super_admin') return ['admin', 'manager', 'agent', 'field_agent', 'staff']
-  if (viewer === 'admin') return ['manager', 'agent', 'field_agent', 'staff']
-  if (viewer === 'manager') return ['agent', 'field_agent', 'staff']
+  if (viewer === 'super_admin') return ['admin', 'manager', 'agent', 'field_agent', 'staff', 'marketing']
+  if (viewer === 'admin') return ['manager', 'agent', 'field_agent', 'staff', 'marketing']
+  if (viewer === 'manager') return ['agent', 'field_agent', 'staff', 'marketing']
   return []
 }
 
