@@ -49,8 +49,8 @@ const EXACT: Record<SheetLeadField, string[]> = {
   agentName: ['agent', 'agentname', 'callagent', 'assignedto', 'salesperson', 'calledby'],
   status: ['status', 'leadstatus', 'callstatus', 'response'],
   systemSizeRange: ['systemsizerange', 'solarsize', 'whatsizesolarsystemareyouplanningtoinstall'],
-  installLocation: ['installlocation', 'wheredoyouwanttoinstallasolarsystem'],
-  installTimeline: ['installtimeline', 'whendoyouplantoinstallthesolarsystem'],
+  installLocation: ['installlocation', 'installlocationform', 'wheredoyouwanttoinstallasolarsystem'],
+  installTimeline: ['installtimeline', 'installtimelineform', 'whendoyouplantoinstallthesolarsystem'],
 }
 
 /** Fallback for long Meta form questions: header contains ALL words of one rule. Checked in order. */

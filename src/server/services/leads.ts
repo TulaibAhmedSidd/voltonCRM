@@ -1,9 +1,9 @@
 import 'server-only'
-import { DEPARTMENTS, type Department, type LostReason, type Stage } from '@/domain/constants'
-import { AuditLog, Department as DepartmentModel, FollowUp, LeadAssignment, Team, Visit } from '@/server/db/models'
+import { DEPARTMENTS, PIPELINES, type Department, type LostReason, type Stage } from '@/domain/constants'
+import { AuditLog, ContactAttempt, Department as DepartmentModel, FollowUp, LeadAssignment, Team, User, Visit } from '@/server/db/models'
 import type { SessionUser } from '@/server/auth/session'
 import { loadLeadFor } from '@/server/auth/guards'
-import { drainQueue, resetAssignment, startAssignment } from '@/server/services/assignment'
+import { drainQueue, manualAssign, resetAssignment, startAssignment } from '@/server/services/assignment'
 import { cancelJobs, isDuplicateKey, logActivity, notify, oid, UserError } from '@/server/services/common'
 
 const STAGE_ORDER: Stage[] = ['new', 'contacted', 'interested', 'requirement_collected', 'site_survey', 'quotation_pending', 'quotation_sent', 'negotiation', 'won', 'lost']
@@ -29,20 +29,69 @@ export async function changeStage(user: SessionUser, leadId: string, stage: Stag
   if (lead.status !== 'open' && lead.teamId) await drainQueue(lead.teamId)
 }
 
-/** Manager re-opens a closed lead: it goes back to the queue for round-robin. */
-export async function reopenLead(user: SessionUser, leadId: string): Promise<void> {
+export interface ReopenOptions {
+  /** Stage to restart from (default New). Won / Lost are not allowed. */
+  stage?: Stage
+  /** 'same' = the agent who had it, 'queue' = next in order, or an agent's id. Default: same agent if there was one. */
+  giveTo?: string
+  note?: string
+}
+
+/** Stages a re-opened lead may start from (the department's board without Won / Lost). */
+export const reopenStages = (department: Department): Stage[] => PIPELINES[department].filter((s) => s !== 'won' && s !== 'lost')
+
+/**
+ * Manager re-opens a closed lead (lost / Dead / junk / won by mistake): back to the chosen stage with 3 fresh tries,
+ * and straight to the same agent (or another one, or the queue). A pending close review is settled at the same time.
+ */
+export async function reopenLead(user: SessionUser, leadId: string, opts: ReopenOptions = {}): Promise<{ agentName: string | null; stage: Stage }> {
   const lead = await loadLeadFor(user, leadId, 'manage')
   if (lead.status === 'open') throw new UserError('The lead is already open')
-  lead.set({ status: 'open', closedAt: null, lostReason: null, wonValuePkr: null, noAnswerStreak: 0, stage: 'contacted', stageChangedAt: new Date(), closeReview: { status: 'none', by: null, at: null } })
+  const dept = await DepartmentModel.findById(lead.departmentId).select('code').lean()
+  const allowed = reopenStages((dept?.code as Department) ?? 'INSTALLATION')
+  const stage = opts.stage ?? 'new'
+  if (!allowed.includes(stage)) throw new UserError('Choose a stage the lead can restart from')
+  const previous = lead.assignment?.agentId ? String(lead.assignment.agentId) : null
+  const giveTo = opts.giveTo || (previous ? 'same' : 'queue')
+  const agentId = giveTo === 'same' ? previous : giveTo === 'queue' ? null : giveTo
+  if (giveTo === 'same' && !previous) throw new UserError('Nobody had this lead — choose an agent or "Next in order"')
+  const agent = agentId ? await User.findOne({ _id: oid(agentId), role: 'agent', deletedAt: null }).select('name isActive departmentId').lean() : null
+  if (agentId && (!agent || !agent.isActive)) throw new UserError(`${agent?.name ?? 'That agent'} is not active any more — choose someone else`)
+  if (agent && String(agent.departmentId) !== String(lead.departmentId)) throw new UserError("Choose an agent of this lead's department")
+
+  const now = new Date()
+  const wasPending = lead.closeReview?.status === 'pending'
+  const closedAs = lead.status
+  lead.set({
+    status: 'open',
+    stage,
+    stageChangedAt: now,
+    closedAt: null,
+    reopenedAt: now,
+    lostReason: null,
+    wonValuePkr: null,
+    attemptCount: 0,
+    noAnswerStreak: 0,
+    nextFollowUpAt: null,
+    closeReview: wasPending ? { status: 'rejected', by: oid(user.id), at: now } : { status: 'none', by: null, at: null },
+    updatedBy: oid(user.id),
+  })
   try {
     await lead.save()
   } catch (error) {
     if (isDuplicateKey(error)) throw new UserError('This customer already has another open lead in this department — work that one')
     throw error
   }
-  await logActivity(lead._id, 'status_changed', user.id, { status: 'open', reopened: true })
+  // The close no longer needs checking in Proof review.
+  if (wasPending) await ContactAttempt.updateMany({ leadId: lead._id, flags: 'lead_closed', 'review.status': 'pending' }, { $set: { review: { status: 'reviewed', by: oid(user.id), at: now, note: 'Lead re-opened by the manager' } } })
+  await logActivity(lead._id, 'status_changed', user.id, { status: 'open', reopened: true, from: closedAs, stage, note: opts.note?.trim().slice(0, 300) || undefined })
   await resetAssignment(lead._id, user.id, 'reopened')
+  if (agent) {
+    await manualAssign(lead._id, String(agent._id), user.id)
+    return { agentName: agent.name, stage }
+  }
   await startAssignment(lead._id)
+  return { agentName: null, stage }
 }
 
 /** Move a lead to the other department's queue (manager of the lead's department, or admin). */

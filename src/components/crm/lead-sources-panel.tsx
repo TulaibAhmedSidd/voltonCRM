@@ -104,23 +104,23 @@ export function LeadSourcesPanel({ sources }: { sources: LeadSourceStatus[] }) {
 
           <div className="mt-3 space-y-3">
             <div className="rounded-md border border-border bg-card p-3 text-xs leading-relaxed space-y-2">
-              <p className="font-semibold text-foreground">Exact expected columns in your file:</p>
+              <p className="font-semibold text-foreground">Columns the CRM understands (same names as the Google Sheet):</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
                 <div className="rounded border border-border bg-muted/40 p-2">
                   <span className="font-medium text-foreground block">Required Columns:</span>
                   <ul className="list-disc list-inside mt-1 space-y-0.5">
-                    <li><strong className="text-foreground">Customer</strong> (or Name / Client)</li>
-                    <li><strong className="text-foreground">Phone</strong> (or Mobile / Contact e.g. 03001234567)</li>
+                    <li><strong className="text-foreground">Phone</strong> (or Mobile / WhatsApp, e.g. 03001234567)</li>
+                    <li><strong className="text-foreground">Customer Name</strong> (or Name / Full name) — recommended</li>
                   </ul>
                 </div>
                 <div className="rounded border border-border bg-muted/40 p-2">
                   <span className="font-medium text-foreground block">Optional Columns:</span>
                   <ul className="list-disc list-inside mt-1 space-y-0.5">
-                    <li><strong>City</strong> (e.g. Lahore, Karachi)</li>
-                    <li><strong>Department</strong> (Trading or Installation)</li>
-                    <li><strong>Source</strong> (Facebook form, WhatsApp, Manual)</li>
-                    <li><strong>Campaign / form / ad</strong></li>
-                    <li><strong>KW / System size</strong> (e.g. 10kW)</li>
+                    <li><strong>Date</strong> (when the lead came in)</li>
+                    <li><strong>Agent</strong> — the lead goes straight to that CRM agent</li>
+                    <li><strong>campaign</strong>, <strong>City</strong>, <strong>Department</strong>, <strong>Comment</strong></li>
+                    <li><strong>KW / System size</strong> (10 or 5_to_15_kw), <strong>Install location</strong>, <strong>Install timeline</strong></li>
+                    <li>Any other column (Follow up, Stage, Lead Status…) is kept on the lead</li>
                   </ul>
                 </div>
               </div>
@@ -128,7 +128,7 @@ export function LeadSourcesPanel({ sources }: { sources: LeadSourceStatus[] }) {
                 💡 <strong>Multi-tab Excel:</strong> If your file has multiple tabs (like Summary, Leads, Follow-ups), the CRM automatically finds and imports directly from the <strong>&ldquo;Leads&rdquo;</strong> tab.
               </p>
               <p className="text-xs text-muted-foreground">
-                🔒 <strong>Anti-duplicate protection:</strong> Any phone number or lead already present in the CRM is automatically detected and skipped so your pipeline stays clean without duplicates.
+                🔒 <strong>Anti-duplicate protection:</strong> leads already in the CRM are skipped, and uploading the same file twice creates nothing twice. Empty template rows are ignored. Imported leads are not sent to round-robin: they go to the agent named in the file, or wait in <strong>Unassigned</strong>.
               </p>
             </div>
 

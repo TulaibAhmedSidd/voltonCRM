@@ -394,7 +394,7 @@ export async function getLeadDetail(id: string, user: SessionUser) {
   }))
   return {
     lead: detail,
-    raw: { departmentId: lead.departmentId ? String(lead.departmentId) : null, site: lead.site ?? {}, trading: lead.trading ?? {}, extra: (lead.extra ?? {}) as Record<string, string>, lostReason: lead.lostReason, closeReview: (lead.closeReview?.status ?? 'none') as string, wonValuePkr: lead.wonValuePkr ?? null, pendingAttempt: ((p) => (p ? { id: p.id, channel: p.channel, tappedAt: p.tappedAt } : null))(attemptViews.find((a) => !a.loggedAt && a.agent.id === user.id)) as PendingTap | null, acceptWithinMin: team?.acceptWithinMin ?? 5 },
+    raw: { departmentId: lead.departmentId ? String(lead.departmentId) : null, site: lead.site ?? {}, trading: lead.trading ?? {}, extra: (lead.extra ?? {}) as Record<string, string>, lostReason: lead.lostReason, closeReview: (lead.closeReview?.status ?? 'none') as string, wonValuePkr: lead.wonValuePkr ?? null, reopenedAt: lead.reopenedAt ? new Date(lead.reopenedAt).toISOString() : null, pendingAttempt: ((p) => (p ? { id: p.id, channel: p.channel, tappedAt: p.tappedAt } : null))(attemptViews.find((a) => !a.loggedAt && a.agent.id === user.id)) as PendingTap | null, acceptWithinMin: team?.acceptWithinMin ?? 5 },
     attempts: attemptViews,
     followUps: followUps.map((f) => ({ id: String(f._id), leadId: String(f.leadId), leadName: detail.name, number: f.number, dueAt: iso(f.dueAt)!, status: f.status, isOverdue: f.status === 'pending' && f.dueAt < new Date() }) as FollowUpView),
     activities: activities.map((a) => {
