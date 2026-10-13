@@ -26,9 +26,10 @@ import { en } from '@/i18n/en'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { isManagerOrAdmin } from '@/server/auth/scope'
-import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, eraseCustomerAction, changeStageAction, createVisitAction, reopenLeadAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
+import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, eraseCustomerAction, changeStageAction, createVisitAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
 import { getAssignableAgents, getLeadDetail } from '@/server/services/queries'
-import { AGENT_STAGES } from '@/server/services/leads'
+import { AGENT_STAGES, reopenStages } from '@/server/services/leads'
+import { ReopenLeadCard } from '@/components/crm/reopen-lead-card'
 import { formatPkrCompact } from '@/lib/money'
 import { QuotationBuilder } from '@/components/crm/quotation-builder'
 import { websiteCatalog } from '@/server/services/website'
@@ -56,11 +57,13 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const canQuote = user.role !== 'field_agent' && lead.status === 'open' && (manager || (mine && lead.assignmentState === 'accepted'))
   // Steps + "what to do now" (src/domain/lead-journey.ts)
   const ordered = [...attempts].reverse()
+  // After a manager re-opens a lead, tries 1 of 3 count again from that moment (older ones stay in Proof / Timeline).
+  const sinceReopen = raw.reopenedAt ? ordered.filter((a) => new Date(a.tappedAt) >= new Date(raw.reopenedAt!)) : ordered
   const journey = leadJourney({
     assignmentState: lead.assignmentState,
     status: lead.status,
     closeReview: raw.closeReview,
-    attempts: ordered.map((a) => ({ tappedAt: a.tappedAt, loggedAt: a.loggedAt, result: a.result, response: a.response, cancelled: a.cancelled })),
+    attempts: sinceReopen.map((a) => ({ tappedAt: a.tappedAt, loggedAt: a.loggedAt, result: a.result, response: a.response, cancelled: a.cancelled })),
     nextFollowUpAt: lead.nextFollowUpAt,
     assignedAt: lead.sla?.startedAt,
     acceptWithinMin: raw.acceptWithinMin,
@@ -83,6 +86,25 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
         <section aria-label="Lead steps" className="space-y-3">
           <NextStepCard next={raw.closeReview === 'pending' && lead.status === 'won' ? { ...journey.next, text: `Marked WON (${formatPkrCompact(raw.wonValuePkr ?? 0)}) — ${journey.next.text}` } : journey.next} />
         </section>
+      ) : null}
+
+      {manager && lead.status !== 'open' ? (
+        <ReopenLeadCard
+          leadId={lead.id}
+          closedAs={
+            lead.status === 'lost'
+              ? `Lost${raw.lostReason ? ` — ${en.lostReason[raw.lostReason as keyof typeof en.lostReason] ?? raw.lostReason}` : ''}`
+              : lead.status === 'unreachable'
+                ? 'Dead (no answer 3 times)'
+                : lead.status === 'junk'
+                  ? 'Junk / wrong number'
+                  : `Won (${formatPkrCompact(raw.wonValuePkr ?? 0)})`
+          }
+          pendingReview={raw.closeReview === 'pending'}
+          stages={reopenStages(lead.department).map((s) => ({ value: s, label: STAGE_META[s].label }))}
+          previousAgent={lead.agent ? { id: lead.agent.id, name: lead.agent.name } : null}
+          agents={agents.filter((a) => !a.departmentCode || a.departmentCode === lead.department).map((a) => ({ id: a.id, name: a.name, checkedIn: a.attendance === 'checked_in' }))}
+        />
       ) : null}
 
       {lead.status === 'open' && (mine || manager) ? (
@@ -233,14 +255,6 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
                 </Button>
               </ActionForm>
             </details>
-            {lead.status !== 'open' ? (
-              <ActionForm action={reopenLeadAction} className="self-end">
-                <input type="hidden" name="leadId" value={lead.id} />
-                <Button type="submit" variant="outline" size="touch" className="w-full">
-                  Reopen lead
-                </Button>
-              </ActionForm>
-            ) : null}
           </div>
 </>,
                   },

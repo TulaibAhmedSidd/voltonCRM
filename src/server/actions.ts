@@ -306,9 +306,11 @@ export async function changeStageAction(_prev: ActionState, fd: FormData): Promi
 export async function reopenLeadAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const user = await requireRole('admin', 'manager')
   return attempt(async () => {
-    await reopenLead(user, String(fd.get('leadId')))
+    const stage = z.enum(STAGES).optional().parse(str(fd, 'stage') || undefined)
+    const r = await reopenLead(user, String(fd.get('leadId')), { stage, giveTo: str(fd, 'giveTo'), note: str(fd, 'note') })
     refresh()
-    return { ok: true, message: 'Re-opened and sent to the queue' }
+    const stageName = en.stage[r.stage]
+    return { ok: true, message: r.agentName ? `Re-opened as "${stageName}" and given to ${r.agentName} — no Accept needed` : `Re-opened as "${stageName}" and sent to the next agent in order` }
   })
 }
 
@@ -848,12 +850,16 @@ export async function importLeadsSpreadsheetAction(_prev: ActionState, fd: FormD
       entity: 'lead',
       entityId: null,
       action: 'import',
-      after: { filename: file.name, sheet: res.sheetName, created: res.created, duplicates: res.duplicates, invalid: res.invalid },
+      after: { filename: file.name, sheet: res.sheetName, rows: res.totalRows, created: res.created, assigned: res.assigned, duplicates: res.duplicates, invalid: res.invalid },
       actorId: oid(actor.id),
     })
     refresh()
-    const summary = `Tab "${res.sheetName}": ${res.created} new lead(s) imported, ${res.duplicates} duplicate(s) skipped${res.invalid > 0 ? `, ${res.invalid} invalid row(s) skipped` : ''}.`
-    return { ok: true, message: summary }
+    const parts = [`Tab "${res.sheetName}" · ${res.totalRows} rows: ${res.created} new lead${res.created === 1 ? '' : 's'} imported`]
+    if (res.created) parts.push(`${res.assigned} given to the agent named in the file${res.created - res.assigned ? `, ${res.created - res.assigned} waiting in Unassigned` : ''}`)
+    if (res.duplicates) parts.push(`${res.duplicates} already in the CRM (skipped)`)
+    if (res.invalid) parts.push(`${res.invalid} without a valid phone (rows ${res.invalidRows.join(', ')}${res.invalid > res.invalidRows.length ? '…' : ''})`)
+    if (res.unknownAgents.length) parts.push(`agent names not found in the CRM: ${res.unknownAgents.join(', ')}`)
+    return { ok: true, message: parts.join(' · ') }
   })
 }
 

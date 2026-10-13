@@ -158,6 +158,8 @@ const leadSchema = new Schema(
     stageChangedAt: { type: Date, default: () => new Date() },
     status: { type: String, enum: LEAD_STATUSES, default: DEFAULT_LEAD_STATUS },
     closedAt: { type: Date, default: null },
+    /** Manager re-opened a closed lead: tries (1 of 3…) count again from this time. Old calls stay as history. */
+    reopenedAt: { type: Date, default: null },
     lostReason: { type: String, enum: LOST_REASONS, default: null },
     wonValuePkr: { type: Number, min: 0, default: null },
     /** Agent-closed leads (won / lost / Dead) wait for a manager. Won counts in sales only when approved. */

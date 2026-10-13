@@ -132,7 +132,8 @@ export function crc32(buf: Buffer): number {
   return (c ^ 0xffffffff) >>> 0
 }
 
-function zip(entries: [string, Buffer][]): Buffer {
+/** Also used by tests to build hand-made .xlsx files. */
+export function zip(entries: [string, Buffer][]): Buffer {
   const locals: Buffer[] = []
   const centrals: Buffer[] = []
   let offset = 0
