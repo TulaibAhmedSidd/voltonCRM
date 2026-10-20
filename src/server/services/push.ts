@@ -3,6 +3,7 @@ import webpush from 'web-push'
 import { Types } from 'mongoose'
 import { connectDb } from '@/server/db/connection'
 import { PushSubscription } from '@/server/db/models'
+import { getSetting } from '@/server/services/settings'
 
 /**
  * Phone / PC notifications (Web Push). Works on Android Chrome, desktop Chrome / Edge / Firefox, and iPhone when the
@@ -30,6 +31,8 @@ export interface PushPayload {
 /** Send to every device of these users. Dead subscriptions (unsubscribed / expired) are removed. Never throws. */
 export async function sendPush(userIds: string[], payload: PushPayload): Promise<number> {
   if (!ready() || !userIds.length) return 0
+  const notif = await getSetting('notifications').catch(() => ({ enabled: true }))
+  if (notif.enabled === false) return 0
   try {
     await connectDb()
     const subs = await PushSubscription.find({ userId: { $in: userIds.map((id) => new Types.ObjectId(id)) } }).lean()

@@ -1,4 +1,4 @@
-import { Bell, Clock, FileSpreadsheet, HardDrive, Megaphone, MessageCircle, Palette, Users, type LucideIcon } from 'lucide-react'
+import { Bell, BellOff, Clock, FileSpreadsheet, HardDrive, Megaphone, MessageCircle, Palette, Users, type LucideIcon } from 'lucide-react'
 import { headers } from 'next/headers'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
@@ -16,7 +16,7 @@ import { requireRole, type SessionUser } from '@/server/auth/session'
 import { isAdminRole } from '@/server/auth/scope'
 import { connectDb } from '@/server/db/connection'
 import { Lead, User, WhatsAppNumber } from '@/server/db/models'
-import { saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
+import { saveNotificationSettingsAction, saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
 import { cloudinaryUsage } from '@/server/services/cloudinary'
 import { metaMissing } from '@/server/services/meta-leads'
 import { listUsers } from '@/server/services/queries'
@@ -42,6 +42,7 @@ interface SectionDef {
 }
 
 const SECTIONS: SectionDef[] = [
+  { key: 'notifications', title: 'System notifications', description: 'Master switch to mute or turn on all app and push alerts.', icon: BellOff },
   { key: 'my-alerts', title: 'My alerts', description: 'Choose which employee actions you are told about — for everyone or some people.', icon: Bell },
   { key: 'proof-storage', title: 'Proof storage', description: 'See how much space call / chat screenshots use, and clear old ones.', icon: HardDrive },
   { key: 'google-sheets', title: 'Google Sheets', description: 'Connect a leads Sheet; new rows come in every minute.', icon: FileSpreadsheet },
@@ -85,11 +86,17 @@ export default async function SettingsPage(props: PageProps<'/settings'>) {
 
 /** Small live status on each card. */
 async function hubBadges(user: SessionUser, admin: boolean): Promise<Record<string, Pick<HubItem, 'badge' | 'badgeTone'>>> {
-  const [sheets, sheetStatus, waCount] = await Promise.all([getSheetSources(), getSetting('sheet_status'), admin ? WhatsAppNumber.countDocuments({ status: 'connected' }) : Promise.resolve(0)])
+  const [sheets, sheetStatus, waCount, notif] = await Promise.all([
+    getSheetSources(),
+    getSetting('sheet_status'),
+    admin ? WhatsAppNumber.countDocuments({ status: 'connected' }) : Promise.resolve(0),
+    getSetting('notifications'),
+  ])
   const mine = admin ? sheets : sheets.filter((s) => s.department === user.departmentCode)
   const stopped = mine.some((s) => s.tabs.some((t) => sheetStatus[statusKey(s, t)]?.problem))
   const metaOn = !metaMissing().some((k) => k === 'META_PAGE_ID' || k === 'META_PAGE_ACCESS_TOKEN')
   return {
+    notifications: notif.enabled ? { badge: 'Active', badgeTone: 'ok' } : { badge: 'Muted', badgeTone: 'warn' },
     'google-sheets': mine.length ? (stopped ? { badge: 'A tab has stopped', badgeTone: 'warn' } : { badge: `${mine.length} connected`, badgeTone: 'ok' }) : { badge: 'None connected', badgeTone: 'plain' },
     'meta-leads': metaOn ? { badge: 'Connected', badgeTone: 'ok' } : { badge: 'Not connected', badgeTone: 'warn' },
     'whatsapp-numbers': waCount ? { badge: `${waCount} connected`, badgeTone: 'ok' } : { badge: 'None connected', badgeTone: 'plain' },
@@ -101,6 +108,45 @@ async function SectionBody({ section, user, admin }: { section: string; user: Se
   const employeesOf = async () => (await listUsers(user)).filter((u) => (u.role === 'agent' || u.role === 'field_agent') && u.isActive).map((u) => ({ id: u.id, name: u.name, role: u.role }))
 
   switch (section) {
+    case 'notifications': {
+      const notif = await getSetting('notifications')
+      return (
+        <ActionForm action={saveNotificationSettingsAction}>
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-base font-semibold">Master Notification Switch</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Turn off all in-app notifications and web push alerts across the CRM. When muted, notifications are completely silenced, but all background tracking, leads, and jobs continue functioning normally.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  name="enabled"
+                  value="true"
+                  defaultChecked={notif.enabled}
+                  className="mt-1 size-5 accent-primary"
+                />
+                <div>
+                  <span className="text-sm font-medium">Enable system notifications and push alerts</span>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {notif.enabled
+                      ? 'Notifications are currently active for all users.'
+                      : 'Notifications are currently muted. No alerts or popups are being sent.'}
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            <Button type="submit" size="touch">
+              Save notification settings
+            </Button>
+          </div>
+        </ActionForm>
+      )
+    }
     case 'my-alerts': {
       const [me, employees] = await Promise.all([User.findById(user.id).select('role alertPrefs').lean(), employeesOf()])
       return <AlertPrefsForm prefs={prefsOf(me ?? { role: user.role })} employees={employees} />

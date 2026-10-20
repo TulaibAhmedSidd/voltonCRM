@@ -249,7 +249,7 @@ export type IngestStatus = (typeof INGEST_STATUSES)[number]
 export const AUDIT_ACTIONS = ['create', 'update', 'soft_delete', 'restore', 'export', 'erase'] as const
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
 
-export const SETTING_KEYS = ['working_hours', 'holidays', 'sla_defaults', 'sheet_config', 'follow_up_cadence', 'routing', 'theme', 'sheet_status', 'meta_leads'] as const
+export const SETTING_KEYS = ['working_hours', 'holidays', 'sla_defaults', 'sheet_config', 'follow_up_cadence', 'routing', 'theme', 'sheet_status', 'meta_leads', 'notifications'] as const
 export type SettingKey = (typeof SETTING_KEYS)[number]
 
 /** Meta lead-form answers (the client's real form questions). */

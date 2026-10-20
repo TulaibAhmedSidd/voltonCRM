@@ -46,6 +46,20 @@ describe('push notifications', () => {
     expect(await Notification.countDocuments({ userId })).toBe(1)
   })
 
+  it('silences all notifications and push when notifications setting is disabled', async () => {
+    const { setSetting } = await import('@/server/services/settings')
+    await setSetting('notifications', { enabled: false })
+
+    const currentCalls = sendNotification.mock.calls.length
+    const ping = { userIds: [userId], type: 'manager_ping' as const, title: 'Muted notification test', dedupeKey: 'ping:muted:1' }
+    await notify(ping)
+    expect(sendNotification).toHaveBeenCalledTimes(currentCalls)
+    expect(await Notification.countDocuments({ dedupeKey: `ping:muted:1:${userId}` })).toBe(0)
+
+    // Re-enable
+    await setSetting('notifications', { enabled: true })
+  })
+
   it('a device that signs in as someone else now belongs to that person', async () => {
     const other = await User.create({ name: 'Other', email: 'o@p.test', role: 'agent' })
     await savePushSubscription(String(other._id), { endpoint: 'https://push.example/phone', keys: { p256dh: 'p256dh-key-123', auth: 'auth-key-1' } }, 'Android')

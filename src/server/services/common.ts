@@ -3,6 +3,7 @@ import { Types, type ClientSession } from 'mongoose'
 import type { ActivityType, JobKind, NotificationType } from '@/domain/constants'
 import { Activity, Job, Notification } from '@/server/db/models'
 import { sendPush } from '@/server/services/push'
+import { getSetting } from '@/server/services/settings'
 
 export const oid = (id: string | Types.ObjectId) => (typeof id === 'string' ? new Types.ObjectId(id) : id)
 
@@ -37,6 +38,8 @@ export interface NotifyInput {
 
 /** In-app notifications, sent exactly once per (dedupeKey, user). Call AFTER a transaction commits. */
 export async function notify({ userIds, type, title, body = '', link, dedupeKey }: NotifyInput): Promise<void> {
+  const notif = await getSetting('notifications').catch(() => ({ enabled: true }))
+  if (notif.enabled === false) return
   const unique = [...new Set(userIds.map(String))]
   if (unique.length === 0) return
   const docs = unique.map((userId) => ({ userId: oid(userId), type, title, body, link: link ?? null, dedupeKey: `${dedupeKey}:${userId}` }))

@@ -18,6 +18,11 @@ export interface RoutingConfig {
   fallback: Department | null
 }
 
+export interface NotificationSettings {
+  /** Master switch: when false, all in-app and push notifications are muted */
+  enabled: boolean
+}
+
 interface SettingTypes {
   working_hours: WorkingHours
   sheet_config: SheetConfig
@@ -26,6 +31,7 @@ interface SettingTypes {
   /** key = sheet tab key (see sheetTabKey) */
   sheet_status: Record<string, SheetTabStatus>
   meta_leads: MetaLeadsState
+  notifications: NotificationSettings
 }
 
 /** One Facebook/Instagram lead form seen on the page, and which department its leads go to. */
@@ -58,16 +64,31 @@ const DEFAULTS: SettingTypes = {
   theme: DEFAULT_THEME,
   sheet_status: {},
   meta_leads: { forms: {} },
+  notifications: { enabled: true },
+}
+
+const settingCache = new Map<string, { value: unknown; expiresAt: number }>()
+
+export function clearSettingCache(key?: SettingKey): void {
+  if (key) settingCache.delete(key)
+  else settingCache.clear()
 }
 
 export async function getSetting<K extends keyof SettingTypes>(key: K): Promise<SettingTypes[K]> {
+  const cached = settingCache.get(key)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value as SettingTypes[K]
+  }
   await connectDb()
   const doc = await Setting.findOne({ key }).lean()
-  return { ...DEFAULTS[key], ...((doc?.value as object) ?? {}) } as SettingTypes[K]
+  const resolved = { ...DEFAULTS[key], ...((doc?.value as object) ?? {}) } as SettingTypes[K]
+  settingCache.set(key, { value: resolved, expiresAt: Date.now() + 5000 })
+  return resolved
 }
 
 export async function setSetting(key: SettingKey, value: unknown, userId?: string): Promise<void> {
   await connectDb()
+  settingCache.delete(key)
   await Setting.updateOne({ key }, { $set: { value, updatedBy: userId ?? null } }, { upsert: true })
 }
 

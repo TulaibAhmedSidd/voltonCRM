@@ -1124,6 +1124,24 @@ export async function saveThemeAction(_prev: ActionState, fd: FormData): Promise
 
 // ── Notifications ──
 
+/** Master switch: turn all system and push notifications on or off (Settings → Notifications). Admin and manager. */
+export async function saveNotificationSettingsAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const enabled = fd.get('enabled') === 'true'
+    await setSetting('notifications', { enabled }, actor.id)
+    await AuditLog.create({
+      entity: 'setting',
+      entityId: null,
+      action: 'update',
+      after: { key: 'notifications', enabled },
+      actorId: oid(actor.id),
+    })
+    refresh()
+    return { ok: true, message: enabled ? 'Notifications turned on' : 'Notifications muted for all users' }
+  })
+}
+
 export async function markNotificationsReadAction(): Promise<void> {
   const user = await requireUser()
   await Notification.updateMany({ userId: oid(user.id), readAt: null }, { readAt: new Date() })
