@@ -28,11 +28,11 @@ vi.mock('next/cache', () => ({
   revalidateTag: vi.fn(),
 }))
 
-const { ALL_MODELS, BackupRecord, Contact, Department, FollowUp, Lead, Quotation, User, WhatsAppNumber } = await import('@/server/db/models')
+const { ALL_MODELS, BackupRecord, Department, FollowUp, Lead, Quotation, User, WhatsAppNumber } = await import('@/server/db/models')
 const { ingestLead } = await import('@/server/services/ingest')
 const { isLeadLockedForAgent, requestLeadUnlock, reviewLeadUnlock } = await import('@/server/services/leads')
 const { loadLeadFor } = await import('@/server/auth/guards')
-const { recordFollowUpAction, connectWhatsAppNumberAction, disconnectAgentWhatsAppAction } = await import('@/server/actions')
+const { recordFollowUpAction, disconnectAgentWhatsAppAction } = await import('@/server/actions')
 const { createStandaloneQuotation, listCentralQuotations, updateQuotationStatus } = await import('@/server/services/quotations')
 const { runAutomatedBackup, checkAutomatedBackupIfDue, listBackups, restoreBackup } = await import('@/server/services/backup')
 const { defaultQuotation } = await import('@/domain/quotation')
@@ -165,7 +165,7 @@ describe('2. Follow-Up 1, 2, 3 Table Actions', () => {
     await startSession(agentUser.id)
 
     const res = await recordFollowUpAction({ ok: true }, fd)
-    expect(res.ok).toBe(true)
+    expect(res?.ok).toBe(true)
 
     // Verify follow-up record created
     const fu = await FollowUp.findOne({ leadId: leadCId, number: 1 }).lean()
@@ -297,7 +297,7 @@ describe('5. Agent-Level WhatsApp Connection and Disconnection', () => {
     await startSession(agentUser.id)
 
     const res = await disconnectAgentWhatsAppAction()
-    expect(res.ok).toBe(true)
+    expect(res?.ok).toBe(true)
 
     const updated = await WhatsAppNumber.findOne({ number: '+923001234567' }).lean()
     expect(updated?.status).toBe('disconnected')
