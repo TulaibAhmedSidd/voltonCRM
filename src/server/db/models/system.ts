@@ -2,6 +2,7 @@
 import { Schema, type ClientSession, type InferSchemaType } from 'mongoose'
 import {
   AUDIT_ACTIONS,
+  BACKUP_STATUSES,
   DEFAULT_INGEST_STATUS,
   DEFAULT_JOB_STATUS,
   DOCUMENT_CATEGORIES,
@@ -229,6 +230,35 @@ export const Message = defineModel('Message', messageSchema)
 export const Setting = defineModel('Setting', settingSchema)
 export const IngestEvent = defineModel('IngestEvent', ingestEventSchema)
 export const Counter = defineModel('Counter', counterSchema)
+
+const backupRecordSchema = new Schema(
+  {
+    timestamp: { type: Date, required: true, default: () => new Date() },
+    status: { type: String, enum: BACKUP_STATUSES, required: true, default: 'in_progress' },
+    trigger: { type: String, enum: ['scheduled', 'manual'], default: 'scheduled' },
+    counts: {
+      leads: { type: Number, default: 0 },
+      contacts: { type: Number, default: 0 },
+      followUps: { type: Number, default: 0 },
+      messages: { type: Number, default: 0 },
+      quotations: { type: Number, default: 0 },
+      assignments: { type: Number, default: 0 },
+      settings: { type: Number, default: 0 },
+    },
+    sizeBytes: { type: Number, default: 0 },
+    snapshotJson: { type: String, default: null },
+    checksum: { type: String, default: null },
+    error: { type: String, default: null },
+    actorId: { type: ObjectId, ref: 'User', default: null },
+    restoredAt: { type: Date, default: null },
+  },
+  { timestamps: true },
+)
+backupRecordSchema.index({ timestamp: -1 })
+backupRecordSchema.index({ status: 1, timestamp: -1 })
+
+export const BackupRecord = defineModel('BackupRecord', backupRecordSchema)
+export type BackupRecordDoc = InferSchemaType<typeof backupRecordSchema>
 
 /** Atomic sequence (lead numbers, quotation numbers). Safe under concurrency. */
 export async function nextSequence(name: string, session?: ClientSession): Promise<number> {

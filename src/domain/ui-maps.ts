@@ -12,6 +12,7 @@ import {
   CircleCheck,
   CircleDashed,
   CircleX,
+  Send,
   ClipboardList,
   Clock,
   Coffee,
@@ -241,6 +242,13 @@ export const WHATSAPP_NUMBER_STATUS_META: MetaMap<C.WhatsAppNumberStatus> = {
 }
 
 /** Enums shown as coloured badges: [values, meta map]. Keyed by the constant's name. */
+export const QUOTATION_STATUS_META: MetaMap<C.QuotationStatus> = {
+  draft: { label: en.quotationStatus.draft, tone: 'neutral', icon: FileText },
+  sent: { label: en.quotationStatus.sent, tone: 'info', icon: Send },
+  accepted: { label: en.quotationStatus.accepted, tone: 'success', icon: CircleCheck },
+  rejected: { label: en.quotationStatus.rejected, tone: 'danger', icon: CircleX },
+}
+
 export const ENUM_UI_MAPS = {
   ROLES: [C.ROLES, ROLE_META],
   DEPARTMENTS: [C.DEPARTMENTS, DEPARTMENT_META],
@@ -263,6 +271,7 @@ export const ENUM_UI_MAPS = {
   ACTIVITY_TYPES: [C.ACTIVITY_TYPES, ACTIVITY_TYPE_META],
   WHATSAPP_NUMBER_STATUSES: [C.WHATSAPP_NUMBER_STATUSES, WHATSAPP_NUMBER_STATUS_META],
   VISIT_STATUSES: [C.VISIT_STATUSES, VISIT_STATUS_META],
+  QUOTATION_STATUSES: [C.QUOTATION_STATUSES, QUOTATION_STATUS_META],
 } as const satisfies Record<string, readonly [readonly string[], Record<string, StatusMeta>]>
 
 /** Enums shown as plain text (selects, tables): [values, labels]. */
@@ -304,6 +313,7 @@ export const INTERNAL_ENUMS = [
   'INGEST_SOURCES',
   'INGEST_STATUSES',
   'SETTING_KEYS',
+  'BACKUP_STATUSES',
   'TONES',
 ] as const
 

@@ -218,8 +218,16 @@ export const NOTIFICATION_TYPES = [
   'manager_ping',
   /** Work instruction given / updated (Instructions tab). */
   'instruction',
+  'lead_unlock_request',
 ] as const
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
+
+export const QUOTATION_STATUSES = ['draft', 'sent', 'accepted', 'rejected'] as const
+export type QuotationStatus = (typeof QUOTATION_STATUSES)[number]
+export const DEFAULT_QUOTATION_STATUS: QuotationStatus = 'sent'
+
+export const BACKUP_STATUSES = ['completed', 'failed', 'in_progress'] as const
+export type BackupStatus = (typeof BACKUP_STATUSES)[number]
 
 /** Work instructions (Instructions tab): given by a manager or a colleague, updated by both sides. */
 export const INSTRUCTION_STATUSES = ['todo', 'in_progress', 'review', 'completed', 'on_hold'] as const

@@ -55,6 +55,12 @@ export interface LeadSummary {
   sla?: { startedAt: string; deadline: string }
   lostReason?: string
   receivedAt: string
+  /** Table follow-up buttons 1, 2, 3 */
+  followUps?: { number: number; status: 'pending' | 'done'; completedAt?: string; notes?: string }[]
+  /** Controlled lead locking: true if agent has an earlier unfinished lead */
+  isLocked?: boolean
+  unlockRequested?: boolean
+  unlockedForAgent?: boolean
 }
 
 export interface LeadDetail extends LeadSummary {

@@ -9,17 +9,19 @@ import { EmptyState } from '@/components/common/states'
 import { LeadCard } from '@/components/crm/lead-card'
 import { LeadDetailsDialog } from '@/components/crm/lead-details-dialog'
 import { LeadBulkActions, LeadSelectBox } from '@/components/crm/lead-bulk-actions'
-import { AssignmentBadge, DepartmentBadge, SourceBadge, StageBadge } from '@/components/crm/badges'
-import { StatusBadge } from '@/components/common/status-badge'
+import { AssignmentBadge, SourceBadge } from '@/components/crm/badges'
+
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
 import { AssignLeadDialog } from '@/components/crm/assign-lead-dialog'
 import { ActionForm } from '@/components/common/action-form'
-import { pullSheetAction } from '@/server/actions'
+import { pullSheetAction, requestLeadUnlockAction, reviewLeadUnlockAction } from '@/server/actions'
 import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone, maskPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
-import { ArrowLeft, List, Users } from 'lucide-react'
+import { ArrowLeft, List, Lock, Users } from 'lucide-react'
+import { FollowUpButtonModal } from '@/components/crm/follow-up-modal'
+import { SendQuotationDialog } from '@/components/crm/send-quotation-dialog'
 import { LEAD_VIEWS, PAGE_SIZE, employeeLeadStats, getAssignableAgents, getQueuePanels, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
 import { en } from '@/i18n/en'
 import { DATE_PRESET_LABEL, activeFilterCount, parseLeadFilters, receivedRange, type DatePreset } from '@/domain/lead-filters'
@@ -81,32 +83,65 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     for (const [k, v] of Object.entries({ person: personId, view, q: one('q'), sort: one('sort'), dir: one('dir'), ...filters, ...params })) if (v !== undefined && v !== '') q.set(k, String(v))
     return `/leads?${q}`
   }
+    const currentSearchPath = href({})
   const columns: Column<LeadSummary>[] = [
     ...(canDelete ? [{ key: 'select', header: '', cell: (l: LeadSummary) => <LeadSelectBox leadId={l.id} label={`${l.name} ${l.leadNo}`} /> }] : []),
     {
       key: 'name',
       header: 'Customer',
       cell: (l) => (
-        <Link href={`/leads/${l.id}`} className="font-medium underline-offset-4 hover:underline">
-          {l.name}
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Link
+              href={`/leads/${l.id}?returnTo=${encodeURIComponent(currentSearchPath)}`}
+              className="font-medium underline-offset-4 hover:underline"
+            >
+              {l.name}
+            </Link>
+            <SourceBadge channel={l.channel} detail={l.sourceDetail} platform={l.platform} isAd={l.isAd} size="sm" />
+            {l.isLocked ? (
+              <span className="inline-flex items-center gap-1 rounded bg-tone-warning-soft px-1.5 py-0.5 text-xs font-semibold text-tone-warning-soft-foreground">
+                <Lock className="size-3" aria-hidden /> Locked
+              </span>
+            ) : null}
+            {l.unlockRequested ? (
+              <span className="inline-flex items-center gap-1 rounded bg-tone-info-soft px-1.5 py-0.5 text-xs font-semibold text-tone-info-soft-foreground">
+                Unlock Requested
+              </span>
+            ) : null}
+          </div>
           <span className="block text-xs text-muted-foreground">
             {l.maskPhone ? maskPhone(l.phone) : formatPhone(l.phone)} · {l.leadNo}
           </span>
-        </Link>
-      ),
-    },
-    {
-      key: 'stage',
-      header: 'Stage',
-      cell: (l) => (
-        <div className="flex flex-wrap items-center gap-1">
-          <StageBadge stage={l.stage} size="sm" />
-          {l.lostReason === 'not_interested' ? <StatusBadge tone="danger" label="Not interested" size="sm" /> : null}
+          {user.role === 'agent' && l.isLocked && !l.unlockRequested ? (
+            <ActionForm action={requestLeadUnlockAction} className="pt-0.5">
+              <input type="hidden" name="leadId" value={l.id} />
+              <Button type="submit" size="xs" variant="outline" className="h-7 text-xs">
+                Request Lead from Manager
+              </Button>
+            </ActionForm>
+          ) : null}
+          {canAssign && l.unlockRequested ? (
+            <div className="flex items-center gap-1 pt-0.5">
+              <ActionForm action={reviewLeadUnlockAction} className="inline-block">
+                <input type="hidden" name="leadId" value={l.id} />
+                <input type="hidden" name="approve" value="true" />
+                <Button type="submit" size="xs" variant="outline" className="h-7 text-xs text-tone-success-soft-foreground">
+                  Approve
+                </Button>
+              </ActionForm>
+              <ActionForm action={reviewLeadUnlockAction} className="inline-block">
+                <input type="hidden" name="leadId" value={l.id} />
+                <input type="hidden" name="approve" value="false" />
+                <Button type="submit" size="xs" variant="ghost" className="h-7 text-xs text-tone-danger-soft-foreground">
+                  Reject
+                </Button>
+              </ActionForm>
+            </div>
+          ) : null}
         </div>
       ),
     },
-    { key: 'dept', header: 'Dept', cell: (l) => <DepartmentBadge department={l.department} size="sm" /> },
-    { key: 'source', header: 'Source', cell: (l) => <SourceBadge channel={l.channel} detail={l.sourceDetail} platform={l.platform} isAd={l.isAd} size="sm" /> },
     {
       key: 'agent',
       header: 'Agent',
@@ -129,8 +164,69 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         </div>
       ),
     },
-    { key: 'attempts', header: 'Attempts', sortable: true, align: 'end', cell: (l) => l.attemptCount },
-    { key: 'followup', header: 'Next follow-up', sortable: true, cell: (l) => (l.nextFollowUpAt ? formatPktDateTime(new Date(l.nextFollowUpAt)) : '—') },
+    {
+      key: 'followup1',
+      header: 'Follow-Up 1',
+      cell: (l) => {
+        const fu = l.followUps?.find((f) => f.number === 1) ?? { number: 1, status: 'pending' as const }
+        return (
+          <FollowUpButtonModal
+            leadId={l.id}
+            leadNo={l.leadNo}
+            customerName={l.name}
+            customerPhone={l.phone}
+            followUp={fu}
+            canEdit={user.role === 'agent' ? !l.isLocked : true}
+          />
+        )
+      },
+    },
+    {
+      key: 'followup2',
+      header: 'Follow-Up 2',
+      cell: (l) => {
+        const fu = l.followUps?.find((f) => f.number === 2) ?? { number: 2, status: 'pending' as const }
+        return (
+          <FollowUpButtonModal
+            leadId={l.id}
+            leadNo={l.leadNo}
+            customerName={l.name}
+            customerPhone={l.phone}
+            followUp={fu}
+            canEdit={user.role === 'agent' ? !l.isLocked : true}
+          />
+        )
+      },
+    },
+    {
+      key: 'followup3',
+      header: 'Follow-Up 3',
+      cell: (l) => {
+        const fu = l.followUps?.find((f) => f.number === 3) ?? { number: 3, status: 'pending' as const }
+        return (
+          <FollowUpButtonModal
+            leadId={l.id}
+            leadNo={l.leadNo}
+            customerName={l.name}
+            customerPhone={l.phone}
+            followUp={fu}
+            canEdit={user.role === 'agent' ? !l.isLocked : true}
+          />
+        )
+      },
+    },
+    {
+      key: 'quote',
+      header: 'Quotation',
+      cell: (l) => (
+        <SendQuotationDialog
+          leadId={l.id}
+          leadNo={l.leadNo}
+          customerName={l.name}
+          customerPhone={l.phone}
+        />
+      ),
+    },
     { key: 'received', header: 'Received', sortable: true, cell: (l) => formatPktDateTime(new Date(l.receivedAt)) },
     { key: 'details', header: 'Details', cell: (l) => <LeadDetailsDialog leadId={l.id} compact /> },
   ]

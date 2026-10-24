@@ -1,9 +1,9 @@
 import 'server-only'
 import { DEPARTMENTS, PIPELINES, type Department, type LostReason, type Stage } from '@/domain/constants'
-import { AuditLog, ContactAttempt, Department as DepartmentModel, FollowUp, LeadAssignment, Team, User, Visit } from '@/server/db/models'
+import { AuditLog, ContactAttempt, Department as DepartmentModel, FollowUp, Lead, LeadAssignment, Team, User, Visit } from '@/server/db/models'
 import type { SessionUser } from '@/server/auth/session'
 import { loadLeadFor } from '@/server/auth/guards'
-import { drainQueue, manualAssign, resetAssignment, startAssignment } from '@/server/services/assignment'
+import { drainQueue, managersOf, manualAssign, resetAssignment, startAssignment } from '@/server/services/assignment'
 import { cancelJobs, isDuplicateKey, logActivity, notify, oid, UserError } from '@/server/services/common'
 
 const STAGE_ORDER: Stage[] = ['new', 'contacted', 'interested', 'requirement_collected', 'site_survey', 'quotation_pending', 'quotation_sent', 'negotiation', 'won', 'lost']
@@ -150,4 +150,98 @@ export async function deleteLeads(user: SessionUser, leadIds: string[], reason: 
   }
   if (deleted.length) await AuditLog.create({ entity: 'lead', entityId: null, action: 'soft_delete', after: { count: deleted.length, leadNos: deleted.slice(0, 50), reason: reason.slice(0, 200) }, actorId: oid(user.id) })
   return { deleted, skipped }
+}
+
+
+/**
+ * Agent-level controlled lead locking:
+ * An agent must work on assigned leads one at a time.
+ * The next lead is locked until the agent has completed the current lead (disposed / closed,
+ * or completed 3 follow-ups), unless explicitly unlocked by manager approval.
+ */
+export async function isLeadLockedForAgent(
+  agentId: string,
+  lead: { _id: unknown; status?: string; unlockedForAgent?: boolean; assignment?: { assignedAt?: Date | null; state?: string } | null },
+): Promise<boolean> {
+  if (lead.status !== 'open' || lead.unlockedForAgent) return false
+  const assignedAt = lead.assignment?.assignedAt
+  if (!assignedAt) return false
+
+  const earlierIncompleteLead = await Lead.findOne({
+    _id: { $ne: lead._id },
+    'assignment.agentId': oid(agentId),
+    'assignment.state': 'accepted',
+    status: 'open',
+    'assignment.assignedAt': { $lt: assignedAt },
+    unlockedForAgent: { $ne: true },
+  }).select('_id attemptCount').lean()
+
+  if (!earlierIncompleteLead) return false
+
+  const completedFollowUps = await FollowUp.countDocuments({
+    leadId: earlierIncompleteLead._id,
+    status: 'done',
+  })
+
+  return completedFollowUps < 3
+}
+
+export async function requestLeadUnlock(user: SessionUser, leadId: string): Promise<void> {
+  if (user.role !== 'agent') throw new UserError('Only agents request lead unlocking')
+  const lead = await loadLeadFor(user, leadId, 'view')
+  if (lead.unlockedForAgent) throw new UserError('This lead is already unlocked')
+  lead.set({ unlockRequested: true, updatedBy: oid(user.id) })
+  await lead.save()
+
+  await logActivity(lead._id, 'note_added', user.id, { text: 'Agent requested manager approval to unlock lead' })
+
+  const managers = await managersOf(lead.departmentId)
+  if (managers.length) {
+    await notify({
+      userIds: managers,
+      type: 'lead_unlock_request',
+      title: `${user.name} requested to unlock lead ${lead.leadNo}`,
+      body: 'Agent wants to work this lead while another is in progress.',
+      link: `/leads/${lead._id}`,
+      dedupeKey: `unlock_req:${lead._id}:${Date.now()}`,
+    })
+  }
+}
+
+export async function reviewLeadUnlock(manager: SessionUser, leadId: string, approve: boolean): Promise<void> {
+  if (manager.role === 'agent') throw new UserError('Only managers or admins can approve unlock requests')
+  const lead = await loadLeadFor(manager, leadId, 'manage')
+  const agentId = lead.assignment?.agentId ? String(lead.assignment.agentId) : null
+
+  lead.set({
+    unlockedForAgent: approve,
+    unlockRequested: false,
+    updatedBy: oid(manager.id),
+  })
+  await lead.save()
+
+  await logActivity(lead._id, 'status_changed', manager.id, {
+    text: approve ? 'Manager approved unlock request' : 'Manager rejected unlock request',
+    approved: approve,
+  })
+
+  await AuditLog.create({
+    entity: 'lead',
+    entityId: lead._id,
+    action: 'update',
+    after: { unlockedForAgent: approve, unlockRequested: false },
+    actorId: oid(manager.id),
+    at: new Date(),
+  })
+
+  if (agentId) {
+    await notify({
+      userIds: [agentId],
+      type: 'manager_ping',
+      title: approve ? `Lead ${lead.leadNo} Unlocked ✓` : `Unlock request declined for ${lead.leadNo}`,
+      body: approve ? `${manager.name} approved your request to work on this lead.` : 'Please complete your active lead first.',
+      link: `/leads/${lead._id}`,
+      dedupeKey: `unlock_res:${lead._id}:${Date.now()}`,
+    })
+  }
 }

@@ -12,6 +12,7 @@ import { Erasure } from '@/server/db/models/erasures'
 import { Instruction, JobRole } from '@/server/db/models/work'
 import {
   AuditLog,
+  BackupRecord,
   Counter,
   DocumentFile,
   IngestEvent,
@@ -56,5 +57,6 @@ export const ALL_MODELS = [
   Message,
   Setting,
   IngestEvent,
+  BackupRecord,
   Counter,
 ] as const

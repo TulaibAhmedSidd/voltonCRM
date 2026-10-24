@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { refresh, revalidatePath } from 'next/cache'
 import { headers } from 'next/headers'
 import { z } from 'zod'
-import { AGENT_ACTIVITY_EVENTS, ATTEMPT_CHANNELS, DEPARTMENTS, LOST_REASONS, REVIEW_STATUSES, ROLES, STAGES, VISIT_STATUSES, type AttemptChannel, type Role } from '@/domain/constants'
+import { AGENT_ACTIVITY_EVENTS, ATTEMPT_CHANNELS, DEPARTMENTS, LOST_REASONS, QUOTATION_STATUSES, REVIEW_STATUSES, ROLES, STAGES, VISIT_STATUSES, type AttemptChannel, type QuotationStatus, type Role } from '@/domain/constants'
 import { attemptOutcomeInput, leadQuickAddInput, siteBasicsInput, teamSettingsInput } from '@/domain/schemas'
 import { getSheetSources, previewSheet, pullSheet, saveSheetSources, spreadsheetIdFrom, type PullResult } from '@/server/services/sheet'
 import type { SheetSource } from '@/domain/sheet-columns'
@@ -13,7 +13,7 @@ import { getServerEnv } from '@/lib/env'
 import { normalizePhone } from '@/lib/phone'
 import { normalizeUsername, usernameProblem } from '@/lib/username'
 import { connectDb } from '@/server/db/connection'
-import { AuditLog, Contact, Lead, Notification, Team, User, Visit, WhatsAppNumber } from '@/server/db/models'
+import { AuditLog, Contact, FollowUp, Lead, Notification, Team, User, Visit, WhatsAppNumber } from '@/server/db/models'
 import { formatPktDate, formatPktDateTime } from '@/lib/dates-pkt'
 import { clearProofs, formatBytes, PROOF_RANGES, type ProofRange } from '@/server/services/storage'
 import { en } from '@/i18n/en'
@@ -26,14 +26,15 @@ import { cancelAttempt, logOutcome, reviewAttempt, tapAttempt } from '@/server/s
 import { cancelJobs, errorState, logActivity, notify, oid, UserError, type ActionState } from '@/server/services/common'
 import { ingestLead } from '@/server/services/ingest'
 import { importLeadsFromSpreadsheet } from '@/server/services/excel-import'
-import { changeStage, deleteLeads, reopenLead, transferLead } from '@/server/services/leads'
+import { changeStage, deleteLeads, reopenLead, requestLeadUnlock, reviewLeadUnlock, transferLead } from '@/server/services/leads'
 import { clear, hit, isBlocked } from '@/server/services/rate-limit'
 import { setSetting } from '@/server/services/settings'
 import { assignVisit, createVisit, updateVisit } from '@/server/services/visits'
 import { sendWhatsAppDocument, sendWhatsAppText } from '@/server/services/whatsapp'
 import { saveMetaFormDepartments, subscribeMetaPage, syncMetaLeads } from '@/server/services/meta-leads'
 import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
-import { createQuotation, getQuotationFor } from '@/server/services/quotations'
+import { createQuotation, createStandaloneQuotation, getQuotationFor, updateQuotationStatus } from '@/server/services/quotations'
+import { restoreBackup, runAutomatedBackup } from '@/server/services/backup'
 import { eraseCustomer } from '@/server/services/erasure'
 import { createInstruction, createJobRole, deleteJobRole, resolveJobRole, updateInstruction } from '@/server/services/work'
 import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
@@ -1031,16 +1032,30 @@ const signupInput = z.object({
 
 /** Called by the "Connect WhatsApp number" button after Meta's sign-up window finishes. */
 export async function connectWhatsAppNumberAction(input: unknown): Promise<ActionState> {
-  const actor = await requireRole('admin')
+  const actor = await requireUser()
   return attempt(async () => {
     const parsed = signupInput.safeParse(input)
     if (!parsed.success) return { ok: false, message: 'The Meta sign-up did not finish — press Connect again and complete every step.' }
-    const r = await completeEmbeddedSignup(parsed.data, actor.id)
+    const agentId = actor.role === 'agent' || actor.role === 'field_agent' ? actor.id : (parsed.data.agentId ?? actor.id)
+    const r = await completeEmbeddedSignup({ ...parsed.data, agentId }, actor.id)
     refresh()
     const parts = [`Connected ${r.displayName} (${r.number}).`]
     if (r.coexistence) parts.push('Keep using the WhatsApp Business app on the phone — every chat now also appears in the CRM. Old chats arrive over the next few hours.')
     if (r.warnings.length) parts.push(`Note: ${r.warnings.join(' · ')}`)
     return { ok: true, message: parts.join(' ') }
+  })
+}
+
+/** Disconnect agent's own WhatsApp number */
+export async function disconnectAgentWhatsAppAction(): Promise<ActionState> {
+  const actor = await requireUser()
+  return attempt(async () => {
+    await WhatsAppNumber.updateMany(
+      { agentId: oid(actor.id) },
+      { $set: { status: 'disconnected', agentId: null, ownerType: 'department' } },
+    )
+    refresh()
+    return { ok: true, message: 'WhatsApp account disconnected' }
   })
 }
 
@@ -1269,5 +1284,139 @@ export async function clearProofsAction(_prev: ActionState, fd: FormData): Promi
     if (dryRun) return { ok: true, message: r.count ? `${r.count} screenshot(s), ${formatBytes(r.bytes)} (${span}) would be deleted. Calls, results and notes stay. Type CLEAR and press "Clear now" to delete them.` : `Nothing to clear for ${span}.` }
     refresh()
     return { ok: true, message: `Cleared ${r.count} screenshot(s) — ${formatBytes(r.bytes)} freed (${span}).` }
+  })
+}
+
+
+// ── Follow-Up directly from table modal ──
+export async function recordFollowUpAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireUser()
+  return attempt(async () => {
+    const leadId = str(fd, 'leadId')
+    const number = Number(fd.get('number'))
+    const outcome = str(fd, 'outcome') ?? 'completed'
+    const notes = str(fd, 'notes') ?? ''
+    const completed = fd.get('completed') === 'true'
+
+    if (!leadId || !isObjectId(leadId)) return { ok: false, message: 'Lead not found' }
+    if (![1, 2, 3].includes(number)) return { ok: false, message: 'Invalid follow-up number' }
+
+    const lead = await loadLeadFor(actor, leadId, actor.role === 'agent' ? 'work' : 'manage')
+    const now = new Date()
+
+    const existing = await FollowUp.findOne({ leadId: lead._id, number })
+    if (existing && existing.status === 'done' && !notes) {
+      return { ok: true, message: `Follow-up ${number} is already completed.` }
+    }
+
+    await FollowUp.findOneAndUpdate(
+      { leadId: lead._id, number },
+      {
+        $set: {
+          agentId: lead.assignment?.agentId ?? oid(actor.id),
+          dueAt: existing?.dueAt ?? now,
+          status: completed ? 'done' : (existing?.status ?? 'pending'),
+          completedAt: completed ? now : existing?.completedAt,
+          outcome: outcome + (notes ? `: ${notes}` : ''),
+        },
+      },
+      { upsert: true, returnDocument: 'after' },
+    )
+
+    if (completed) {
+      await Lead.updateOne(
+        { _id: lead._id },
+        {
+          $inc: { attemptCount: 1 },
+          $set: { lastContactAt: now, updatedBy: oid(actor.id) },
+        },
+      )
+      await logActivity(lead._id, 'follow_up_completed', actor.id, {
+        number,
+        outcome,
+        notes: notes.slice(0, 200),
+      })
+    }
+
+    refresh()
+    return { ok: true, message: `Follow-up ${number} saved ✓` }
+  })
+}
+
+// ── Lead Locking & Unlock Requests ──
+export async function requestLeadUnlockAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireUser()
+  return attempt(async () => {
+    const leadId = str(fd, 'leadId')
+    if (!leadId || !isObjectId(leadId)) return { ok: false, message: 'Lead not found' }
+    await requestLeadUnlock(actor, leadId)
+    refresh()
+    return { ok: true, message: 'Request sent to manager ✓' }
+  })
+}
+
+export async function reviewLeadUnlockAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const leadId = str(fd, 'leadId')
+    const approve = fd.get('approve') === 'true'
+    if (!leadId || !isObjectId(leadId)) return { ok: false, message: 'Lead not found' }
+    await reviewLeadUnlock(actor, leadId, approve)
+    refresh()
+    return { ok: true, message: approve ? 'Lead unlocked for agent ✓' : 'Unlock request declined' }
+  })
+}
+
+// ── Standalone & Central Quotations ──
+export async function createStandaloneQuotationAction(input: {
+  quotation: unknown
+  customer: { name: string; phone: string; address?: string; leadId?: string }
+  markSent: boolean
+}): Promise<QuotationState> {
+  const user = await requireUser()
+  try {
+    const r = await createStandaloneQuotation(user, input.quotation, input.customer, { markSent: !!input.markSent })
+    refresh()
+    return { ok: true, quotationId: r.id, quotationNo: r.quotationNo, message: `Quotation ${r.quotationNo} created` }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : 'Failed to create quotation' }
+  }
+}
+
+export async function updateQuotationStatusAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await requireUser()
+  return attempt(async () => {
+    const quotationId = str(fd, 'quotationId')
+    const status = str(fd, 'status')
+    if (!quotationId || !isObjectId(quotationId)) return { ok: false, message: 'Quotation not found' }
+    if (!status || !QUOTATION_STATUSES.includes(status as QuotationStatus)) return { ok: false, message: 'Invalid status' }
+    await updateQuotationStatus(user, quotationId, status as QuotationStatus)
+    refresh()
+    return { ok: true, message: `Quotation status updated to ${status}` }
+  })
+}
+
+// ── Backups ──
+export async function triggerAutomatedBackupAction(): Promise<ActionState> {
+  const actor = await requireRole('admin')
+  return attempt(async () => {
+    const res = await runAutomatedBackup('manual', actor.id)
+    refresh()
+    if (res.status === 'completed') {
+      return { ok: true, message: `Backup completed (${res.counts.leads} leads, ${res.counts.quotations} quotations, ${(res.sizeBytes / 1024).toFixed(1)} KB)` }
+    } else {
+      return { ok: false, message: `Backup failed: ${res.error}` }
+    }
+  })
+}
+
+export async function restoreBackupAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin')
+  return attempt(async () => {
+    const backupId = str(fd, 'backupId')
+    if (!backupId || !isObjectId(backupId)) return { ok: false, message: 'Backup not found' }
+    const res = await restoreBackup(backupId, actor)
+    refresh()
+    return { ok: res.ok, message: res.message }
   })
 }

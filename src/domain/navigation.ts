@@ -1,4 +1,4 @@
-import { Building2, CalendarClock, CircleHelp, ClipboardList, LayoutDashboard, List, MapPin, Settings, ShieldCheck, SquareKanban, Users, type LucideIcon } from 'lucide-react'
+import { Building2, CalendarClock, FileSpreadsheet, LayoutDashboard, List, MapPin, Settings, ShieldCheck, SquareKanban, Users, type LucideIcon } from 'lucide-react'
 import type { Role } from '@/domain/constants'
 import { en } from '@/i18n/en'
 
@@ -13,15 +13,14 @@ export interface NavItem {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/dashboard', label: en.nav.dashboard, icon: LayoutDashboard, roles: ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff', 'marketing'], mobile: true },
-  { href: '/instructions', label: 'Instructions', icon: ClipboardList, roles: ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff'], mobile: false },
   { href: '/leads', label: en.nav.leads, icon: List, roles: ['super_admin', 'admin', 'manager', 'agent', 'marketing'], mobile: true },
+  { href: '/quotations', label: en.nav.quotations, icon: FileSpreadsheet, roles: ['super_admin', 'admin', 'manager', 'agent'], mobile: false },
   { href: '/follow-ups', label: en.nav.followUps, icon: CalendarClock, roles: ['manager', 'agent', 'marketing'], mobile: true },
   { href: '/visits', label: en.nav.visits, icon: MapPin, roles: ['super_admin', 'admin', 'manager', 'field_agent', 'marketing'], mobile: false },
   { href: '/pipeline', label: en.nav.pipeline, icon: SquareKanban, roles: ['super_admin', 'admin', 'manager', 'marketing'], mobile: true },
   { href: '/team', label: en.nav.team, icon: Users, roles: ['super_admin', 'admin', 'manager', 'marketing'], mobile: false },
   { href: '/review', label: en.nav.review, icon: ShieldCheck, roles: ['super_admin', 'admin', 'manager'], mobile: false },
   { href: '/settings', label: en.nav.settings, icon: Settings, roles: ['super_admin', 'admin', 'manager'], mobile: false },
-  { href: '/help', label: en.nav.help, icon: CircleHelp, roles: ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff', 'marketing'], mobile: false },
   { href: '/admin', label: en.nav.admin, icon: Building2, roles: ['super_admin', 'admin'], mobile: false },
 ]
 

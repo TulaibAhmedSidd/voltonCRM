@@ -178,6 +178,9 @@ const leadSchema = new Schema(
     attemptCount: { type: Number, default: 0, min: 0 },
     noAnswerStreak: { type: Number, default: 0, min: 0 },
     nextFollowUpAt: { type: Date, default: null },
+    /** Manager explicitly unlocked this lead for the agent to work before finishing the previous one. */
+    unlockedForAgent: { type: Boolean, default: false },
+    unlockRequested: { type: Boolean, default: false },
     site: { type: siteSchema, default: undefined },
     trading: { type: tradingSchema, default: undefined },
     /** Unknown Sheet columns, kept so nothing is lost. */

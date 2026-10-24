@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { AlarmClock, CalendarClock, ClipboardList, ListChecks, MapPin, UserPlus, Users } from 'lucide-react'
+import { AlarmClock, CalendarClock, ListChecks, MapPin, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ActionTile } from '@/components/common/action-tile'
 import { PageHeader } from '@/components/common/page-header'
@@ -8,12 +8,14 @@ import { SectionCard } from '@/components/common/section-card'
 import { EmptyState } from '@/components/common/states'
 import { StatusBadge } from '@/components/common/status-badge'
 import { CheckInCard } from '@/components/crm/check-in-card'
+import { AgentWhatsAppCard } from '@/components/crm/agent-whatsapp-card'
+import { embeddedSignupConfig } from '@/server/services/whatsapp-onboarding'
 import { FollowUpItem } from '@/components/crm/follow-up-item'
 import { KpiGrid } from '@/components/crm/kpi-grid'
 import { LeadCard } from '@/components/crm/lead-card'
 import { TeamMemberRow } from '@/components/crm/team-member-row'
-import { INSTRUCTION_STATUS_META, VISIT_STATUS_META } from '@/domain/ui-maps'
-import { listInstructions } from '@/server/services/work'
+import { VISIT_STATUS_META } from '@/domain/ui-maps'
+
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { WhatsAppNumber } from '@/server/db/models'
@@ -47,12 +49,27 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
     const shift = <CheckInCard status={(attendance?.status as 'checked_in') ?? 'checked_out'} since={attendance?.checkInAt?.toISOString()} onCheckIn={checkInAction} onCheckOut={checkOutAction} onToggleBreak={toggleBreakAction} forVisits={user.role === 'field_agent'} />
 
     if (user.role === 'field_agent') {
-      const visits = (await listVisits(user)).filter((v) => v.status === 'assigned' || v.status === 'rescheduled')
+      const [allVisits, myNumber] = await Promise.all([
+        listVisits(user),
+        WhatsAppNumber.findOne({ agentId: oid(user.id), status: 'connected' }).select('number displayName coexistence lastEchoAt').lean(),
+      ])
+      const visits = allVisits.filter((v) => v.status === 'assigned' || v.status === 'rescheduled')
       return (
         <>
           <PageHeader title={greeting} description="Your site visits" />
           {noticeEl}
           {shift}
+          <AgentWhatsAppCard
+            connectedNumber={myNumber ? {
+              number: myNumber.number,
+              displayName: myNumber.displayName,
+              coexistence: Boolean(myNumber.coexistence),
+              lastEchoAt: myNumber.lastEchoAt,
+            } : null}
+            signup={embeddedSignupConfig()}
+            agentId={user.id}
+            agentName={user.name}
+          />
           <ActionTile href="/visits" label="Site visits to do" icon={MapPin} count={visits.length} tone="info" />
           <SectionCard title={`Visits to do (${visits.length})`} actions={<Button asChild variant="outline" size="touch"><Link href="/visits">Open visits</Link></Button>}>
             {visits.length === 0 ? <EmptyState title="No visits assigned" /> : (
@@ -81,6 +98,17 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
         <PageHeader title={greeting} description="Your leads and follow-ups for today" />
         {noticeEl}
         {shift}
+        <AgentWhatsAppCard
+          connectedNumber={myNumber ? {
+            number: myNumber.number,
+            displayName: myNumber.displayName,
+            coexistence: Boolean(myNumber.coexistence),
+            lastEchoAt: myNumber.lastEchoAt,
+          } : null}
+          signup={embeddedSignupConfig()}
+          agentId={user.id}
+          agentName={user.name}
+        />
         <div className="grid grid-cols-2 gap-3">
           <ActionTile href="/leads?view=mine" label="My leads" icon={ListChecks} count={mine.total} tone="brand" />
           <ActionTile href="/follow-ups" label="Follow-ups due" icon={CalendarClock} count={dueToday.length} tone="warning" />
@@ -104,45 +132,18 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
           {dueToday.length === 0 ? <EmptyState title="Nothing due" /> : dueToday.slice(0, 10).map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}`} />)}
         </SectionCard>
         <KpiGrid items={kpis.slice(0, 8)} />
-        <SectionCard title="My WhatsApp" description={myNumber ? undefined : 'Connect the WhatsApp Business number on your phone so your chats are saved as proof automatically.'}>
-          {myNumber ? (
-            <p className="text-sm">
-              <span className="font-medium">{myNumber.displayName ?? 'Your number'} · {myNumber.number}</span> is connected. Customer messages and the replies you type in the WhatsApp Business app are saved on the lead automatically{myNumber.lastEchoAt ? ` (last reply from your phone ${formatPktDateTime(myNumber.lastEchoAt)})` : ''}.
-            </p>
-          ) : (
-            <ol className="list-decimal space-y-1 ps-5 text-sm text-muted-foreground">
-              <li>Tell your manager or admin you want your WhatsApp connected — only an <b>admin</b> can do it (Settings → WhatsApp numbers → Connect, choosing your name).</li>
-              <li>Keep your phone with you: the WhatsApp <b>Business</b> app on it must be updated, and you confirm the connection on the phone.</li>
-              <li>Until then, keep using the WhatsApp button on each lead and add a screenshot as proof.</li>
-            </ol>
-          )}
-        </SectionCard>
+        
       </>
     )
   }
 
   if (user.role === 'staff') {
-    const { rows } = await listInstructions(user, 'mine')
-    const open = rows.filter((r) => r.status !== 'completed')
     return (
       <>
-        <PageHeader title={greeting} description="Your work instructions" />
+        <PageHeader title={greeting} description="Welcome to Volt On CRM" />
         {noticeEl}
-        <ActionTile href="/instructions" label="Open instructions" icon={ClipboardList} count={open.length} tone="brand" />
-        <SectionCard title={`To do now (${open.length})`} actions={<Button asChild variant="outline" size="touch"><Link href="/instructions">All</Link></Button>}>
-          {open.length === 0 ? <EmptyState title="Nothing to do" description="New instructions appear here and you get a notification." /> : (
-            <ul className="divide-y divide-border">
-              {open.slice(0, 8).map((i) => (
-                <li key={i.id} className="flex items-center justify-between gap-3 py-2">
-                  <Link href="/instructions" className="min-w-0">
-                    <p className="truncate font-medium">{i.title}</p>
-                    <p className="truncate text-xs text-muted-foreground">from {i.giver.name}{i.dueAt ? ` · due ${formatPktDateTime(new Date(i.dueAt))}` : ''}</p>
-                  </Link>
-                  <StatusBadge {...INSTRUCTION_STATUS_META[i.status]} size="sm" />
-                </li>
-              ))}
-            </ul>
-          )}
+        <SectionCard title="Dashboard">
+          <EmptyState title="Welcome" description="Your account is active. Check with your manager for team allocations." />
         </SectionCard>
       </>
     )

@@ -40,6 +40,8 @@ interface LeadLike {
   attemptCount?: number | null
   nextFollowUpAt?: Date | null
   receivedAt: Date
+  unlockedForAgent?: boolean
+  unlockRequested?: boolean
 }
 
 let deptMapCache: { at: number; map: Map<string, Department> } | null = null
@@ -53,18 +55,47 @@ async function getDepartmentMap(): Promise<Map<string, Department>> {
   return map
 }
 
-async function lookups(leads: { contactId: unknown; departmentId?: unknown; assignment?: { agentId?: unknown } | null }[]) {
+async function lookups(leads: { _id?: unknown; contactId: unknown; departmentId?: unknown; assignment?: { agentId?: unknown } | null }[], user?: SessionUser) {
   const contactIds = [...new Set(leads.map((l) => String(l.contactId)))]
   const agentIds = [...new Set(leads.map((l) => l.assignment?.agentId).filter(Boolean).map(String))]
-  const [contacts, agents, dept] = await Promise.all([
+  const leadIds = leads.map((l) => (l as { _id?: unknown })._id).filter(Boolean)
+  const [contacts, agents, dept, followUpsList, earliestActiveLead] = await Promise.all([
     contactIds.length ? Contact.find({ _id: { $in: contactIds } }).lean() : Promise.resolve([]),
     agentIds.length ? User.find({ _id: { $in: agentIds } }).select('name').lean() : Promise.resolve([]),
     getDepartmentMap(),
+    leadIds.length ? FollowUp.find({ leadId: { $in: leadIds } }).lean() : Promise.resolve([]),
+    user?.role === 'agent'
+      ? Lead.findOne({
+          'assignment.agentId': oid(user.id),
+          'assignment.state': 'accepted',
+          status: 'open',
+          unlockedForAgent: { $ne: true },
+        })
+          .sort({ 'assignment.assignedAt': 1 })
+          .select('_id')
+          .lean()
+      : Promise.resolve(null),
   ])
+
+  const followUpMap = new Map<string, { number: number; status: 'pending' | 'done'; completedAt?: string; notes?: string }[]>()
+  for (const f of followUpsList) {
+    const k = String(f.leadId)
+    const list = followUpMap.get(k) ?? []
+    list.push({
+      number: f.number,
+      status: f.status === 'done' ? 'done' : 'pending',
+      completedAt: f.completedAt ? f.completedAt.toISOString() : undefined,
+      notes: f.outcome ?? undefined,
+    })
+    followUpMap.set(k, list)
+  }
+
   return {
     contact: new Map(contacts.map((c) => [String(c._id), c])),
     agent: new Map(agents.map((a) => [String(a._id), a.name])),
     dept,
+    followUps: followUpMap,
+    earliestActiveLeadId: earliestActiveLead ? String(earliestActiveLead._id) : null,
   }
 }
 
@@ -97,6 +128,19 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
     sla: user.role === 'agent' || user.role === 'manager' || user.role === 'admin' ? sla : undefined,
     lostReason: l.lostReason ?? undefined,
     receivedAt: iso(l.receivedAt)!,
+    followUps: [1, 2, 3].map((num) => {
+      const list = maps.followUps?.get(String(l._id)) ?? []
+      const found = list.find((item) => item.number === num)
+      return found ?? { number: num, status: 'pending' as const }
+    }),
+    isLocked:
+      user.role === 'agent' &&
+      l.status === 'open' &&
+      !l.unlockedForAgent &&
+      maps.earliestActiveLeadId !== null &&
+      maps.earliestActiveLeadId !== String(l._id),
+    unlockRequested: !!l.unlockRequested,
+    unlockedForAgent: !!l.unlockedForAgent,
   }
 }
 
@@ -162,7 +206,7 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
     Lead.countDocuments(filter),
     Promise.all(LEAD_VIEWS.map(async (v) => [v, await Lead.countDocuments({ $and: [scope, person, views[v]] })] as const)),
   ])
-  const maps = await lookups(docs)
+  const maps = await lookups(docs, user)
   return { rows: docs.map((d) => toSummary(d, maps, user)), total, counts: Object.fromEntries(countEntries) as Record<LeadView, number> }
 }
 

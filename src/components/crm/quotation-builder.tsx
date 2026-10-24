@@ -20,7 +20,8 @@ import {
   type QuotationInput,
 } from '@/domain/quotation'
 import type { CatalogItem, WebsiteCatalog } from '@/domain/website'
-import { createQuotationAction, sendQuotationWhatsAppAction } from '@/server/actions'
+import { createQuotationAction, createStandaloneQuotationAction, sendQuotationWhatsAppAction } from '@/server/actions'
+import { defaultQuotation } from '@/domain/quotation'
 import { cn } from '@/lib/utils'
 
 export interface QuotationRow {
@@ -137,14 +138,45 @@ function ProductPick({ items, onPick }: { items: CatalogItem[]; onPick: (item: C
   )
 }
 
-export function QuotationBuilder({ leadId, initial, quotations, canCreate, customer, catalog }: { leadId: string; initial: QuotationInput; quotations: QuotationRow[]; canCreate: boolean; customer: { name: string; phone: string }; catalog?: WebsiteCatalog }) {
+export interface QuotationLeadOption {
+  id: string
+  leadNo: string
+  customerName: string
+  customerPhone: string
+  address?: string
+}
+
+export function QuotationBuilder({
+  leadId,
+  initial,
+  quotations = [],
+  canCreate = true,
+  customer = { name: '', phone: '', address: '' },
+  catalog,
+  isStandalone = false,
+  leadsList = [],
+}: {
+  leadId?: string
+  initial?: QuotationInput
+  quotations?: QuotationRow[]
+  canCreate?: boolean
+  customer?: { name: string; phone: string; address?: string }
+  catalog?: WebsiteCatalog
+  isStandalone?: boolean
+  leadsList?: QuotationLeadOption[]
+}) {
   const site = catalog?.ok ? catalog.items : { panels: [], inverters: [], batteries: [] }
   const withSite = (own: string[], items: CatalogItem[]) => [...new Set([...items.map((i) => i.label), ...own])]
-  const [q, setQ] = useState<QuotationInput>(initial)
+  const [q, setQ] = useState<QuotationInput>(initial ?? defaultQuotation())
   const [markSent, setMarkSent] = useState(true)
   const [pending, start] = useTransition()
   const [result, setResult] = useState<{ ok: boolean; message?: string; quotationId?: string; quotationNo?: string } | null>(null)
   const totals = useMemo(() => quotationLines(q), [q])
+
+  const [custName, setCustName] = useState(customer.name || '')
+  const [custPhone, setCustPhone] = useState(customer.phone || '')
+  const [custAddress, setCustAddress] = useState(customer.address || '')
+  const [selectedLeadId, setSelectedLeadId] = useState(leadId || '')
 
   const set = <K extends keyof QuotationInput>(key: K, value: QuotationInput[K]) => setQ((prev) => ({ ...prev, [key]: value }))
   const num = (key: keyof QuotationInput) => ({
@@ -160,16 +192,35 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
   function generate() {
     setResult(null)
     start(async () => {
-      const r = await createQuotationAction({ leadId, quotation: q, markSent })
-      setResult(r)
+      if (isStandalone || !leadId) {
+        if (!custName.trim() || !custPhone.trim()) {
+          setResult({ ok: false, message: 'Please enter customer name and phone number' })
+          return
+        }
+        const r = await createStandaloneQuotationAction({
+          quotation: q,
+          customer: {
+            name: custName.trim(),
+            phone: custPhone.trim(),
+            address: custAddress.trim(),
+            leadId: selectedLeadId || undefined,
+          },
+          markSent,
+        })
+        setResult(r)
+      } else {
+        const r = await createQuotationAction({ leadId, quotation: q, markSent })
+        setResult(r)
+      }
     })
   }
 
   async function share(id: string, no: string) {
+    const effectiveName = custName || customer.name || 'Valued Customer'
     try {
       const blob = await (await fetch(`/api/quotations/${id}/pdf`)).blob()
       const file = new File([blob], `Volton-Quotation-${no}.pdf`, { type: 'application/pdf' })
-      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: `Volton Solar quotation ${no}`, text: `Assalam o Alaikum ${customer.name}, please find your Volton Solar quotation ${no} attached.` })
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: `Volton Solar quotation ${no}`, text: `Assalam o Alaikum ${effectiveName}, please find your Volton Solar quotation ${no} attached.` })
       else window.open(`/api/quotations/${id}/pdf?download=1`, '_blank')
     } catch {
       // share sheet closed — nothing to do
@@ -208,6 +259,68 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
             generate()
           }}
         >
+          {isStandalone && (
+            <fieldset className="space-y-3 rounded-xl p-3 ring-1 ring-foreground/10">
+              <legend className="flex items-center gap-2 px-1 text-sm font-semibold">
+                <span className="inline-flex size-6 items-center justify-center rounded-full bg-secondary text-xs text-secondary-foreground">C</span>
+                Customer & Lead Details
+              </legend>
+              {leadsList.length > 0 && (
+                <Field label="Link to existing lead (optional)" hint="Picking a lead will pre-fill customer details">
+                  <select
+                    value={selectedLeadId}
+                    onChange={(e) => {
+                      const lId = e.target.value
+                      setSelectedLeadId(lId)
+                      const found = leadsList.find((l) => l.id === lId)
+                      if (found) {
+                        setCustName(found.customerName)
+                        setCustPhone(found.customerPhone)
+                        if (found.address) setCustAddress(found.address)
+                      }
+                    }}
+                    className={control}
+                  >
+                    <option value="">-- Standalone (No Lead / Direct Customer) --</option>
+                    {leadsList.map((lead) => (
+                      <option key={lead.id} value={lead.id}>
+                        {lead.leadNo} — {lead.customerName} ({lead.customerPhone})
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Customer name *">
+                  <input
+                    required
+                    value={custName}
+                    onChange={(e) => setCustName(e.target.value)}
+                    placeholder="e.g. Muhammad Ali"
+                    className={control}
+                  />
+                </Field>
+                <Field label="Customer phone *">
+                  <input
+                    required
+                    type="tel"
+                    value={custPhone}
+                    onChange={(e) => setCustPhone(e.target.value)}
+                    placeholder="e.g. 03001234567"
+                    className={control}
+                  />
+                </Field>
+              </div>
+              <Field label="Customer address / city (optional)">
+                <input
+                  value={custAddress}
+                  onChange={(e) => setCustAddress(e.target.value)}
+                  placeholder="e.g. DHA Phase 5, Karachi"
+                  className={control}
+                />
+              </Field>
+            </fieldset>
+          )}
           <datalist id="q-panels">{withSite(PANEL_SUGGESTIONS, site.panels).map((s) => <option key={s} value={s} />)}</datalist>
           <datalist id="q-inverters">{withSite(INVERTER_SUGGESTIONS, site.inverters).map((s) => <option key={s} value={s} />)}</datalist>
           <datalist id="q-batteries">{withSite(BATTERY_SUGGESTIONS, site.batteries).map((s) => <option key={s} value={s} />)}</datalist>
@@ -432,7 +545,7 @@ export function QuotationBuilder({ leadId, initial, quotations, canCreate, custo
             {result ? (
               <div role="status" className={cn('space-y-2 rounded-lg px-3 py-2 text-sm', result.ok ? 'bg-tone-success-soft text-tone-success-soft-foreground' : 'bg-tone-danger-soft text-tone-danger-soft-foreground')}>
                 <p>{result.message}</p>
-                {result.ok && result.quotationId && result.quotationNo ? <PdfButtons id={result.quotationId} no={result.quotationNo} total={totals.total} customer={customer} onShare={share} /> : null}
+                {result.ok && result.quotationId && result.quotationNo ? <PdfButtons id={result.quotationId} no={result.quotationNo} total={totals.total} customer={{ name: custName || customer.name, phone: custPhone || customer.phone }} onShare={share} /> : null}
               </div>
             ) : null}
           </div>

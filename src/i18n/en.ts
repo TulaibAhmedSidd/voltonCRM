@@ -158,7 +158,9 @@ export const en = {
     agent_activity: 'Employee activity',
     manager_ping: 'Message from your manager',
     instruction: 'Work instruction',
+    lead_unlock_request: 'Lead unlock request',
   },
+  quotationStatus: { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected' },
   agentActivity: {
     lead_accepted: 'Accepted a lead',
     contact_tap: 'Tapped WhatsApp / WA call / Call on a lead',
@@ -228,6 +230,7 @@ export const en = {
     mobile: 'Quick navigation',
     dashboard: 'Dashboard',
     leads: 'Leads',
+    quotations: 'Quotation Builder',
     pipeline: 'Pipeline',
     followUps: 'Follow-ups',
     admin: 'Company admin',

@@ -31,6 +31,10 @@ export async function loadLeadFor(user: SessionUser, leadId: unknown, access: Le
     if (lead.status !== 'open') throw new UserError('This lead is closed')
     if (String(lead.assignment?.agentId) !== user.id) throw new UserError('This lead is no longer yours')
     if (lead.assignment?.state !== 'accepted') throw new UserError('Accept the lead first')
+    const { isLeadLockedForAgent } = await import('@/server/services/leads')
+    if (await isLeadLockedForAgent(user.id, lead)) {
+      throw new UserError('This lead is currently locked. Complete your current active lead or request manager approval.')
+    }
   }
   if (access === 'work' && lead.status !== 'open') throw new UserError('This lead is closed')
   return lead

@@ -1,4 +1,4 @@
-import { Bell, BellOff, Clock, FileSpreadsheet, HardDrive, Megaphone, MessageCircle, Palette, Users, type LucideIcon } from 'lucide-react'
+import { Bell, BellOff, Clock, Database, FileSpreadsheet, HardDrive, Megaphone, MessageCircle, Palette, Users, type LucideIcon } from 'lucide-react'
 import { headers } from 'next/headers'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
@@ -9,6 +9,8 @@ import { SectionBack, SectionHub, type HubItem } from '@/components/common/secti
 import { AlertPrefsForm } from '@/components/crm/alert-prefs-form'
 import { MetaLeadsPanel } from '@/components/crm/meta-leads-panel'
 import { ProofStorage } from '@/components/crm/proof-storage'
+import { BackupPanel } from '@/components/crm/backup-panel'
+import { listBackups } from '@/server/services/backup'
 import { SheetSources } from '@/components/crm/sheet-sources'
 import { WhatsAppNumbersPanel } from '@/components/crm/whatsapp-numbers-panel'
 import type { SheetTabStatus } from '@/domain/sheet-columns'
@@ -45,6 +47,7 @@ const SECTIONS: SectionDef[] = [
   { key: 'notifications', title: 'System notifications', description: 'Master switch to mute or turn on all app and push alerts.', icon: BellOff },
   { key: 'my-alerts', title: 'My alerts', description: 'Choose which employee actions you are told about — for everyone or some people.', icon: Bell },
   { key: 'proof-storage', title: 'Proof storage', description: 'See how much space call / chat screenshots use, and clear old ones.', icon: HardDrive },
+  { key: 'crm-backups', title: 'CRM Backups', description: 'Automated 30-day snapshots of leads, customer records, WhatsApp history, and quotations.', icon: Database, adminOnly: true },
   { key: 'google-sheets', title: 'Google Sheets', description: 'Connect a leads Sheet; new rows come in every minute.', icon: FileSpreadsheet },
   { key: 'meta-leads', title: 'Meta lead forms', description: 'Facebook / Instagram form leads straight into the CRM; form → department.', icon: Megaphone, adminOnly: true },
   { key: 'whatsapp-numbers', title: 'WhatsApp numbers', description: 'Connect company WhatsApp numbers and say whose phone each is on.', icon: MessageCircle, adminOnly: true },
@@ -97,6 +100,7 @@ async function hubBadges(user: SessionUser, admin: boolean): Promise<Record<stri
   const metaOn = !metaMissing().some((k) => k === 'META_PAGE_ID' || k === 'META_PAGE_ACCESS_TOKEN')
   return {
     notifications: notif.enabled ? { badge: 'Active', badgeTone: 'ok' } : { badge: 'Muted', badgeTone: 'warn' },
+    'crm-backups': { badge: '30-Day Auto', badgeTone: 'ok' },
     'google-sheets': mine.length ? (stopped ? { badge: 'A tab has stopped', badgeTone: 'warn' } : { badge: `${mine.length} connected`, badgeTone: 'ok' }) : { badge: 'None connected', badgeTone: 'plain' },
     'meta-leads': metaOn ? { badge: 'Connected', badgeTone: 'ok' } : { badge: 'Not connected', badgeTone: 'warn' },
     'whatsapp-numbers': waCount ? { badge: `${waCount} connected`, badgeTone: 'ok' } : { badge: 'None connected', badgeTone: 'plain' },
@@ -108,6 +112,10 @@ async function SectionBody({ section, user, admin }: { section: string; user: Se
   const employeesOf = async () => (await listUsers(user)).filter((u) => (u.role === 'agent' || u.role === 'field_agent') && u.isActive).map((u) => ({ id: u.id, name: u.name, role: u.role }))
 
   switch (section) {
+    case 'crm-backups': {
+      const backups = await listBackups()
+      return <BackupPanel backups={backups} />
+    }
     case 'notifications': {
       const notif = await getSetting('notifications')
       return (
