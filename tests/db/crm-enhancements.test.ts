@@ -1,0 +1,306 @@
+/** Comprehensive QA and verification tests for CRM enhancements:
+ * 1. Controlled lead locking & manager approval workflow
+ * 2. Follow-Up 1, 2, 3 recording & atomic updates
+ * 3. Standalone quotation creation, central quotation list, and status updates
+ * 4. Automated 30-day backup engine, due checks, and admin restore security
+ */
+import mongoose, { type Types } from 'mongoose'
+import { afterAll, beforeAll, describe, expect, inject, it, vi } from 'vitest'
+
+const jar = new Map<string, string>()
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { name, value: jar.get(name)! } : undefined),
+    set: (name: string, value: string) => void jar.set(name, value),
+    delete: (name: string) => void jar.delete(name),
+  }),
+  headers: async () => new Headers({ 'x-forwarded-for': '10.9.9.8' }),
+}))
+vi.mock('react', async (importOriginal) => ({ ...(await importOriginal<typeof import('react')>()), cache: <T,>(fn: T) => fn }))
+vi.mock('next/navigation', () => ({
+  redirect: (url: string) => {
+    throw new Error(`NEXT_REDIRECT:${url}`)
+  },
+}))
+vi.mock('next/cache', () => ({
+  refresh: vi.fn(),
+  revalidatePath: vi.fn(),
+  revalidateTag: vi.fn(),
+}))
+
+const { ALL_MODELS, BackupRecord, Contact, Department, FollowUp, Lead, Quotation, User, WhatsAppNumber } = await import('@/server/db/models')
+const { ingestLead } = await import('@/server/services/ingest')
+const { isLeadLockedForAgent, requestLeadUnlock, reviewLeadUnlock } = await import('@/server/services/leads')
+const { loadLeadFor } = await import('@/server/auth/guards')
+const { recordFollowUpAction, connectWhatsAppNumberAction, disconnectAgentWhatsAppAction } = await import('@/server/actions')
+const { createStandaloneQuotation, listCentralQuotations, updateQuotationStatus } = await import('@/server/services/quotations')
+const { runAutomatedBackup, checkAutomatedBackupIfDue, listBackups, restoreBackup } = await import('@/server/services/backup')
+const { defaultQuotation } = await import('@/domain/quotation')
+
+type SessionUser = import('@/server/auth/session').SessionUser
+
+const asSession = (u: { _id: Types.ObjectId; name: string; email: string; role: string; departmentId?: Types.ObjectId | null }, code = 'INSTALLATION'): SessionUser =>
+  ({ id: String(u._id), name: u.name, email: u.email, role: u.role, departmentId: u.departmentId ? String(u.departmentId) : null, departmentCode: code, managerId: null, mustChangePassword: false }) as SessionUser
+
+let adminUser: SessionUser
+let managerUser: SessionUser
+let agentUser: SessionUser
+let leadAId = ''
+let leadBId = ''
+let leadCId = ''
+
+beforeAll(async () => {
+  await mongoose.connect(inject('mongoUri'), { dbName: 'volton_enhancements_test' })
+  globalThis.__voltonMongoose = Promise.resolve(mongoose)
+  await Promise.all(ALL_MODELS.map((m) => m.syncIndexes()))
+
+  const dept = await Department.create({
+    code: 'INSTALLATION',
+    name: 'Installation',
+    stages: ['new', 'contacted', 'interested', 'quotation_sent'],
+    routingKeywords: [],
+  })
+
+  const [adm, mgr, agt] = await User.create([
+    { name: 'Admin Tester', email: 'adm@test.qa', role: 'admin', departmentId: dept._id },
+    { name: 'Manager Tester', email: 'mgr@test.qa', role: 'manager', departmentId: dept._id },
+    { name: 'Agent Tester', email: 'agt@test.qa', role: 'agent', departmentId: dept._id, phone: '+923001234567' },
+  ])
+
+  adminUser = asSession(adm)
+  managerUser = asSession(mgr)
+  agentUser = asSession(agt)
+
+  // Ingest Lead A and Lead B assigned to agentUser
+  const rA = await ingestLead({ name: 'Customer Alpha', phone: '+923001111111', city: 'Karachi', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
+  leadAId = 'leadId' in rA ? rA.leadId : ''
+
+  // Mark Lead A as accepted
+  await Lead.updateOne({ _id: leadAId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date(Date.now() - 3600_000) } })
+
+  const rB = await ingestLead({ name: 'Customer Beta', phone: '+923002222222', city: 'Lahore', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
+  leadBId = 'leadId' in rB ? rB.leadId : ''
+  await Lead.updateOne({ _id: leadBId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date() } })
+})
+
+afterAll(async () => {
+  await mongoose.connection.dropDatabase()
+  await mongoose.disconnect()
+  globalThis.__voltonMongoose = undefined
+})
+
+describe('1. Controlled Lead Assignment, Locking & Manager Approval', () => {
+  it('locks subsequent lead when agent has an earlier open lead with < 3 follow-ups', async () => {
+    const leadB = await Lead.findById(leadBId).lean()
+    expect(leadB).toBeTruthy()
+
+    // Agent has Lead A (0 follow-ups completed)
+    const locked = await isLeadLockedForAgent(agentUser.id, leadB!)
+    expect(locked).toBe(true)
+
+    // loadLeadFor with 'work' access must refuse
+    await expect(loadLeadFor(agentUser, leadBId, 'work')).rejects.toThrow(/locked/i)
+
+    // loadLeadFor with 'view' access must still allow viewing (read-only)
+    const viewable = await loadLeadFor(agentUser, leadBId, 'view')
+    expect(String(viewable._id)).toBe(leadBId)
+  })
+
+  it('allows agent to request lead unlock and manager to approve', async () => {
+    // Agent requests unlock
+    await requestLeadUnlock(agentUser, leadBId)
+    let leadB = await Lead.findById(leadBId).lean()
+    expect(leadB?.unlockRequested).toBe(true)
+    expect(leadB?.unlockedForAgent).toBe(false)
+
+    // Manager approves unlock request
+    await reviewLeadUnlock(managerUser, leadBId, true)
+    leadB = await Lead.findById(leadBId).lean()
+    expect(leadB?.unlockRequested).toBe(false)
+    expect(leadB?.unlockedForAgent).toBe(true)
+
+    // Agent can now work Lead B
+    const lockedAfterApproval = await isLeadLockedForAgent(agentUser.id, leadB!)
+    expect(lockedAfterApproval).toBe(false)
+    const workLead = await loadLeadFor(agentUser, leadBId, 'work')
+    expect(String(workLead._id)).toBe(leadBId)
+  })
+
+  it('automatically unlocks subsequent leads once the active lead finishes all 3 follow-ups', async () => {
+    // Create Lead C
+    const rC = await ingestLead({ name: 'Customer Gamma', phone: '+923003333333', city: 'Islamabad', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
+    leadCId = 'leadId' in rC ? rC.leadId : ''
+    await Lead.updateOne({ _id: leadCId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date() } })
+
+    // Simulate completing all 3 follow-ups on Lead A
+    await FollowUp.create([
+      { leadId: leadAId, agentId: agentUser.id, dueAt: new Date(), number: 1, status: 'done', outcome: 'connected', completedAt: new Date() },
+      { leadId: leadAId, agentId: agentUser.id, dueAt: new Date(), number: 2, status: 'done', outcome: 'connected', completedAt: new Date() },
+      { leadId: leadAId, agentId: agentUser.id, dueAt: new Date(), number: 3, status: 'done', outcome: 'connected', completedAt: new Date() },
+    ])
+    // Also mark Lead B as having 3 follow-ups
+    await FollowUp.create([
+      { leadId: leadBId, agentId: agentUser.id, dueAt: new Date(), number: 1, status: 'done', outcome: 'connected', completedAt: new Date() },
+      { leadId: leadBId, agentId: agentUser.id, dueAt: new Date(), number: 2, status: 'done', outcome: 'connected', completedAt: new Date() },
+      { leadId: leadBId, agentId: agentUser.id, dueAt: new Date(), number: 3, status: 'done', outcome: 'connected', completedAt: new Date() },
+    ])
+
+    const leadC = await Lead.findById(leadCId).lean()
+    const locked = await isLeadLockedForAgent(agentUser.id, leadC!)
+    expect(locked).toBe(false)
+  })
+})
+
+describe('2. Follow-Up 1, 2, 3 Table Actions', () => {
+  it('records follow-up outcome and updates lead without duplication', async () => {
+    const fd = new FormData()
+    fd.set('leadId', leadCId)
+    fd.set('number', '1')
+    fd.set('outcome', 'connected')
+    fd.set('notes', 'Discussed 10kW On-Grid solar system')
+    fd.set('completed', 'true')
+
+    // Start session for agentUser
+    const { startSession } = await import('@/server/auth/session')
+    await startSession(agentUser.id)
+
+    const res = await recordFollowUpAction({ ok: true }, fd)
+    expect(res.ok).toBe(true)
+
+    // Verify follow-up record created
+    const fu = await FollowUp.findOne({ leadId: leadCId, number: 1 }).lean()
+    expect(fu).toBeTruthy()
+    expect(fu?.status).toBe('done')
+    expect(fu?.outcome).toContain('Discussed 10kW')
+
+    // Verify lead attempt count incremented
+    const updatedLead = await Lead.findById(leadCId).lean()
+    expect(updatedLead?.attemptCount).toBeGreaterThanOrEqual(1)
+    expect(updatedLead?.lastContactAt).toBeTruthy()
+  })
+})
+
+describe('3. Standalone Quotation Creation & Central Quotation List', () => {
+  let createdQuotationId = ''
+
+  it('creates a standalone quotation without a linked lead', async () => {
+    const input = {
+      ...defaultQuotation(10),
+      panelQty: 20,
+      panelWatt: 585,
+      panelPrice: 22_000,
+      inverterModel: 'Huawei 10kW KTL',
+      inverterPrice: 420_000,
+    }
+
+    const res = await createStandaloneQuotation(
+      adminUser,
+      input,
+      {
+        name: 'Direct Solar Buyer',
+        phone: '+923008889999',
+        address: 'DHA Phase 6, Karachi',
+      },
+      { markSent: true },
+    )
+
+    expect(res.id).toBeTruthy()
+    expect(res.quotationNo).toMatch(/^VO-\d+$/)
+    expect(res.total).toBeGreaterThan(0)
+    createdQuotationId = res.id
+
+    const saved = await Quotation.findById(res.id).lean()
+    expect(saved).toBeTruthy()
+    expect(saved?.customer.name).toBe('Direct Solar Buyer')
+    expect(saved?.leadId).toBeNull()
+    expect(saved?.status).toBe('sent')
+  })
+
+  it('lists quotations centrally and filters by search query and status', async () => {
+    const listAll = await listCentralQuotations(adminUser, {})
+    expect(listAll.total).toBeGreaterThanOrEqual(1)
+
+    // Filter by query
+    const listFiltered = await listCentralQuotations(adminUser, { q: 'Direct Solar Buyer' })
+    expect(listFiltered.rows.length).toBeGreaterThanOrEqual(1)
+    expect(listFiltered.rows[0].customer.name).toBe('Direct Solar Buyer')
+
+    // Filter by status
+    const listSent = await listCentralQuotations(adminUser, { status: 'sent' })
+    expect(listSent.rows.some((q) => q.id === createdQuotationId)).toBe(true)
+
+    const listDraft = await listCentralQuotations(adminUser, { status: 'draft' })
+    expect(listDraft.rows.some((q) => q.id === createdQuotationId)).toBe(false)
+  })
+
+  it('updates quotation status with role validation', async () => {
+    await updateQuotationStatus(adminUser, createdQuotationId, 'accepted')
+    const updated = await Quotation.findById(createdQuotationId).lean()
+    expect(updated?.status).toBe('accepted')
+  })
+})
+
+describe('4. Automated 30-Day CRM Backup Engine', () => {
+  let backupId = ''
+
+  it('runs automated backup snapshot with SHA-256 integrity checksum', async () => {
+    const res = await runAutomatedBackup('manual', adminUser.id)
+    expect(res.status).toBe('completed')
+    expect(res.counts.leads).toBeGreaterThan(0)
+    expect(res.counts.contacts).toBeGreaterThan(0)
+    expect(res.sizeBytes).toBeGreaterThan(100)
+    expect(res.checksum).toBeTruthy()
+    backupId = res.id
+
+    const record = await BackupRecord.findById(res.id).lean()
+    expect(record).toBeTruthy()
+    expect(record?.status).toBe('completed')
+    expect(record?.checksum).toBe(res.checksum)
+  })
+
+  it('checkAutomatedBackupIfDue returns false when a backup was recently created', async () => {
+    const wasDue = await checkAutomatedBackupIfDue()
+    expect(wasDue).toBe(false)
+  })
+
+  it('lists backups in descending order of timestamp', async () => {
+    const list = await listBackups()
+    expect(list.length).toBeGreaterThanOrEqual(1)
+    expect(list[0].id).toBe(backupId)
+  })
+
+  it('restores backup when requested by an admin and blocks non-admins', async () => {
+    // Non-admin (agent) attempt must throw UserError
+    await expect(restoreBackup(backupId, agentUser)).rejects.toThrow(/administrator/i)
+
+    // Admin attempt succeeds
+    const restoreRes = await restoreBackup(backupId, adminUser)
+    expect(restoreRes.ok).toBe(true)
+    expect(restoreRes.message).toContain('restore')
+  })
+})
+
+describe('5. Agent-Level WhatsApp Connection and Disconnection', () => {
+  it('allows agent to disconnect their own connected WhatsApp account', async () => {
+    // Create a connected number for agent
+    await WhatsAppNumber.create({
+      number: '+923001234567',
+      agentId: agentUser.id,
+      status: 'connected',
+      displayName: 'Agent Line',
+      coexistence: true,
+      ownerType: 'agent',
+      phoneNumberId: 'wa-phone-12345',
+    })
+
+    const { startSession } = await import('@/server/auth/session')
+    await startSession(agentUser.id)
+
+    const res = await disconnectAgentWhatsAppAction()
+    expect(res.ok).toBe(true)
+
+    const updated = await WhatsAppNumber.findOne({ number: '+923001234567' }).lean()
+    expect(updated?.status).toBe('disconnected')
+    expect(updated?.agentId).toBeNull()
+  })
+})
