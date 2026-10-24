@@ -84,3 +84,4 @@ Phase 1 costs $0: Vercel Hobby, Atlas M0 (512 MB), Cloudinary free plan (private
 - Twilio or a browser dialer; unofficial WhatsApp libraries (whatsapp-web.js, Baileys).
 - Hard-coded colours, user-facing strings or enum lists; hard deletes; committed secrets; `--no-verify`.
 - Editing `.claude/skills/**` directly — edit `.agents/skills/**`, then `npm run ai:sync`.
+- Replying in Hindi (Devanagari) or written Urdu script (Arabic/Nastaliq). English and Roman Urdu (Latin script) only.
