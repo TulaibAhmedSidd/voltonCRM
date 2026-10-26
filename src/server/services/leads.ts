@@ -245,3 +245,120 @@ export async function reviewLeadUnlock(manager: SessionUser, leadId: string, app
     })
   }
 }
+
+export async function moveToJunk(user: SessionUser, leadId: string, reason: string): Promise<void> {
+  const access = user.role === 'agent' ? 'work' : 'manage'
+  const lead = await loadLeadFor(user, leadId, access)
+  const now = new Date()
+  lead.set({
+    status: 'junk',
+    closedAt: now,
+    nextFollowUpAt: null,
+    junkedBy: {
+      id: oid(user.id),
+      name: user.name,
+      at: now,
+    },
+    updatedBy: oid(user.id),
+  })
+  await lead.save()
+  await FollowUp.updateMany({ leadId: lead._id, status: 'pending' }, { status: 'cancelled' })
+  await cancelJobs({ leadId: lead._id })
+  await logActivity(lead._id, 'status_changed', user.id, {
+    status: 'junk',
+    junkedBy: user.name,
+    reason: reason.slice(0, 200),
+  })
+  await AuditLog.create({
+    entity: 'lead',
+    entityId: lead._id,
+    action: 'update',
+    after: { status: 'junk', junkedBy: user.name, reason: reason.slice(0, 200) },
+    actorId: oid(user.id),
+    at: now,
+  })
+}
+
+export async function revertJunk(user: SessionUser, leadId: string): Promise<void> {
+  if (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'manager') {
+    throw new UserError('Only a manager or admin can restore a junk lead')
+  }
+  const lead = await loadLeadFor(user, leadId, 'manage')
+  const now = new Date()
+  lead.set({
+    status: 'open',
+    stage: 'new',
+    closedAt: null,
+    reopenedAt: now,
+    junkedBy: undefined,
+    updatedBy: oid(user.id),
+  })
+  await lead.save()
+  await logActivity(lead._id, 'status_changed', user.id, {
+    status: 'open',
+    stage: 'new',
+    reopened: true,
+    note: `Reverted from Junk to active lead by ${user.name}`,
+  })
+  await AuditLog.create({
+    entity: 'lead',
+    entityId: lead._id,
+    action: 'restore',
+    after: { status: 'open', stage: 'new', revertedBy: user.name },
+    actorId: oid(user.id),
+    at: now,
+  })
+}
+
+export async function markQuotationSent(user: SessionUser, leadId: string, quotationId?: string): Promise<void> {
+  const access = user.role === 'agent' ? 'work' : 'manage'
+  const lead = await loadLeadFor(user, leadId, access)
+  const now = new Date()
+  lead.set({
+    quotationSent: true,
+    quotationSentAt: now,
+    stage: 'quotation_sent',
+    updatedBy: oid(user.id),
+  })
+  await lead.save()
+  await logActivity(lead._id, 'stage_changed', user.id, {
+    stage: 'quotation_sent',
+    quotationId,
+    note: `Quotation sent to customer and confirmed by ${user.name}`,
+  })
+}
+
+export async function purgeAllJunkLeads(user: SessionUser): Promise<{ count: number }> {
+  if (user.role !== 'admin' && user.role !== 'super_admin' && user.role !== 'manager') {
+    throw new UserError('Only managers or admins can purge junk leads')
+  }
+  const { leadScope } = await import('@/server/auth/scope')
+  const scope = leadScope(user)
+  const junkLeads = await Lead.find({ $and: [scope, { status: 'junk' }] }).select('_id leadNo').lean()
+  if (!junkLeads.length) return { count: 0 }
+
+  const ids = junkLeads.map((l) => l._id)
+  await Lead.collection.deleteMany({ _id: { $in: ids } })
+  await FollowUp.deleteMany({ leadId: { $in: ids } })
+  await LeadAssignment.deleteMany({ leadId: { $in: ids } })
+  const { Activity } = await import('@/server/db/models')
+  await Activity.collection.deleteMany({ leadId: { $in: ids } })
+
+  await AuditLog.create({
+    entity: 'lead',
+    entityId: null,
+    action: 'erase',
+    after: { count: ids.length, purgedBy: user.name },
+    actorId: oid(user.id),
+    at: new Date(),
+  })
+
+  return { count: ids.length }
+}
+
+export async function getJunkLeadsCount(user: SessionUser): Promise<number> {
+  const { leadScope } = await import('@/server/auth/scope')
+  const scope = leadScope(user)
+  return Lead.countDocuments({ $and: [scope, { status: 'junk' }] })
+}
+

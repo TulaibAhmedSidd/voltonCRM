@@ -181,6 +181,13 @@ const leadSchema = new Schema(
     /** Manager explicitly unlocked this lead for the agent to work before finishing the previous one. */
     unlockedForAgent: { type: Boolean, default: false },
     unlockRequested: { type: Boolean, default: false },
+    junkedBy: {
+      id: { type: ObjectId, ref: 'User', default: null },
+      name: { type: String, default: null },
+      at: { type: Date, default: null },
+    },
+    quotationSent: { type: Boolean, default: false },
+    quotationSentAt: { type: Date, default: null },
     site: { type: siteSchema, default: undefined },
     trading: { type: tradingSchema, default: undefined },
     /** Unknown Sheet columns, kept so nothing is lost. */

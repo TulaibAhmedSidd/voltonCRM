@@ -26,7 +26,7 @@ import { cancelAttempt, logOutcome, reviewAttempt, tapAttempt } from '@/server/s
 import { cancelJobs, errorState, logActivity, notify, oid, UserError, type ActionState } from '@/server/services/common'
 import { ingestLead } from '@/server/services/ingest'
 import { importLeadsFromSpreadsheet } from '@/server/services/excel-import'
-import { changeStage, deleteLeads, reopenLead, requestLeadUnlock, reviewLeadUnlock, transferLead } from '@/server/services/leads'
+import { changeStage, deleteLeads, markQuotationSent, moveToJunk, purgeAllJunkLeads, reopenLead, requestLeadUnlock, revertJunk, reviewLeadUnlock, transferLead } from '@/server/services/leads'
 import { clear, hit, isBlocked } from '@/server/services/rate-limit'
 import { setSetting } from '@/server/services/settings'
 import { assignVisit, createVisit, updateVisit } from '@/server/services/visits'
@@ -34,7 +34,7 @@ import { sendWhatsAppDocument, sendWhatsAppText } from '@/server/services/whatsa
 import { saveMetaFormDepartments, subscribeMetaPage, syncMetaLeads } from '@/server/services/meta-leads'
 import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
 import { createQuotation, createStandaloneQuotation, getQuotationFor, updateQuotationStatus } from '@/server/services/quotations'
-import { restoreBackup, runAutomatedBackup } from '@/server/services/backup'
+import { purgeNotifications, purgeSystemLogs, restoreBackup, runAutomatedBackup, wipeBackupDatabase, wipeDevDatabase } from '@/server/services/backup'
 import { eraseCustomer } from '@/server/services/erasure'
 import { createInstruction, createJobRole, deleteJobRole, resolveJobRole, updateInstruction } from '@/server/services/work'
 import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
@@ -1323,6 +1323,9 @@ export async function recordFollowUpAction(_prev: ActionState, fd: FormData): Pr
       { upsert: true, returnDocument: 'after' },
     )
 
+    const isEarly = str(fd, 'isEarly') === 'true'
+    const finalNotes = isEarly ? `[Early Follow-up ${number} completed ahead of scheduled time] ${notes}` : notes
+
     if (completed) {
       await Lead.updateOne(
         { _id: lead._id },
@@ -1334,7 +1337,8 @@ export async function recordFollowUpAction(_prev: ActionState, fd: FormData): Pr
       await logActivity(lead._id, 'follow_up_completed', actor.id, {
         number,
         outcome,
-        notes: notes.slice(0, 200),
+        early: isEarly,
+        notes: finalNotes.slice(0, 300),
       })
     }
 
@@ -1398,7 +1402,7 @@ export async function updateQuotationStatusAction(_prev: ActionState, fd: FormDa
 
 // ── Backups ──
 export async function triggerAutomatedBackupAction(): Promise<ActionState> {
-  const actor = await requireRole('admin')
+  const actor = await requireRole('admin', 'manager')
   return attempt(async () => {
     const res = await runAutomatedBackup('manual', actor.id)
     refresh()
@@ -1420,3 +1424,84 @@ export async function restoreBackupAction(_prev: ActionState, fd: FormData): Pro
     return { ok: res.ok, message: res.message }
   })
 }
+
+export async function wipeDevDatabaseAction(_prev?: ActionState, _fd?: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin')
+  return attempt(async () => {
+    const res = await wipeDevDatabase(actor)
+    refresh()
+    return { ok: res.ok, message: res.message }
+  })
+}
+
+export async function wipeBackupDatabaseAction(_prev?: ActionState, _fd?: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin')
+  return attempt(async () => {
+    const res = await wipeBackupDatabase(actor)
+    refresh()
+    return { ok: res.ok, message: res.message }
+  })
+}
+
+export async function purgeAllJunkLeadsAction(): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const res = await purgeAllJunkLeads(actor)
+    refresh()
+    return { ok: true, message: `Purged ${res.count} junk leads from the system.` }
+  })
+}
+
+export async function purgeNotificationsAction(): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const res = await purgeNotifications(actor)
+    refresh()
+    return { ok: true, message: `Cleared ${res.count} notifications.` }
+  })
+}
+
+export async function purgeSystemLogsAction(): Promise<ActionState> {
+  const actor = await requireRole('admin')
+  return attempt(async () => {
+    const res = await purgeSystemLogs(actor)
+    refresh()
+    return { ok: true, message: `Trimmed ${res.count} old system log entries.` }
+  })
+}
+
+export async function moveToJunkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager', 'agent')
+  return attempt(async () => {
+    const leadId = str(fd, 'leadId')
+    const reason = str(fd, 'reason') ?? 'Moved to junk by user'
+    if (!leadId) return { ok: false, message: 'Lead not specified' }
+    await moveToJunk(actor, leadId, reason)
+    refresh()
+    return { ok: true, message: 'Lead moved to Junk successfully' }
+  })
+}
+
+export async function revertJunkAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const leadId = str(fd, 'leadId')
+    if (!leadId) return { ok: false, message: 'Lead not specified' }
+    await revertJunk(actor, leadId)
+    refresh()
+    return { ok: true, message: 'Lead restored to active status' }
+  })
+}
+
+export async function markQuotationSentAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager', 'agent')
+  return attempt(async () => {
+    const leadId = str(fd, 'leadId')
+    const quotationId = str(fd, 'quotationId')
+    if (!leadId) return { ok: false, message: 'Lead not specified' }
+    await markQuotationSent(actor, leadId, quotationId)
+    refresh()
+    return { ok: true, message: 'Quotation status saved as Sent to customer ✓' }
+  })
+}
+

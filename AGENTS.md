@@ -28,7 +28,7 @@ Volt On Solar CRM — a mobile-first web app for a Pakistani solar company with 
 | How to work, test, commit, log progress | `docs/ai/workflow.md` |
 
 ## 3. Session start and end
-- **Start:** read this file, then the newest `progress/<date>/next.md` and `remaining.md`.
+- **Start:** read this file, then the newest `progress/<date>/next.md` and `remaining.md`. Always take a fresh copy of the production DB into dev (`MONGODB_URI_NEW_DEV`) before testing, running scratch scripts, or doing development work. Never touch `MONGODB_URI` directly during dev.
 - **End:** run the `daily-progress` skill — create/update `progress/<today>/` (Pakistan date, `YYYY-MM-DD`).
 
 ## 4. Stack
@@ -84,4 +84,5 @@ Phase 1 costs $0: Vercel Hobby, Atlas M0 (512 MB), Cloudinary free plan (private
 - Twilio or a browser dialer; unofficial WhatsApp libraries (whatsapp-web.js, Baileys).
 - Hard-coded colours, user-facing strings or enum lists; hard deletes; committed secrets; `--no-verify`.
 - Editing `.claude/skills/**` directly — edit `.agents/skills/**`, then `npm run ai:sync`.
+- Touching, running tests on, or running scratch scripts on the main production database (`MONGODB_URI`). Always use `MONGODB_URI_NEW_DEV`.
 - Replying in Hindi (Devanagari) or written Urdu script (Arabic/Nastaliq). English and Roman Urdu (Latin script) only.

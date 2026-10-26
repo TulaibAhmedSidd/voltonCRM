@@ -61,6 +61,9 @@ export interface LeadSummary {
   isLocked?: boolean
   unlockRequested?: boolean
   unlockedForAgent?: boolean
+  junkedBy?: { id: string; name: string; at: string }
+  quotationSent?: boolean
+  quotationSentAt?: string
 }
 
 export interface LeadDetail extends LeadSummary {

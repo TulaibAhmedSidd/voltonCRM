@@ -42,6 +42,9 @@ interface LeadLike {
   receivedAt: Date
   unlockedForAgent?: boolean
   unlockRequested?: boolean
+  junkedBy?: { id?: unknown; name?: string | null; at?: Date | null } | null
+  quotationSent?: boolean
+  quotationSentAt?: Date | null
 }
 
 let deptMapCache: { at: number; map: Map<string, Department> } | null = null
@@ -144,7 +147,7 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
   }
 }
 
-export const LEAD_VIEWS = ['all', 'new', 'unassigned', 'mine', 'followups', 'interested', 'won', 'lost', 'unreachable', 'any'] as const
+export const LEAD_VIEWS = ['all', 'new', 'unassigned', 'mine', 'followups', 'interested', 'won', 'lost', 'unreachable', 'junk', 'any'] as const
 export type LeadView = (typeof LEAD_VIEWS)[number]
 export const PAGE_SIZE = 25
 
@@ -175,7 +178,8 @@ export async function listLeads(user: SessionUser, params: LeadListParams): Prom
     interested: { status: 'open', stage: { $in: ['interested', 'requirement_collected', 'site_survey', 'quotation_pending', 'quotation_sent', 'negotiation'] } },
     won: { status: 'won' },
     lost: { status: 'lost' },
-    unreachable: { status: { $in: ['unreachable', 'junk'] } },
+    unreachable: { status: 'unreachable' },
+    junk: { status: 'junk' },
     any: {},
   }
   const person = params.personId && user.role !== 'agent' && Types.ObjectId.isValid(params.personId) ? { 'assignment.agentId': oid(params.personId) } : {}

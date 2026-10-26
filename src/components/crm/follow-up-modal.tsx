@@ -31,6 +31,8 @@ export function FollowUpButtonModal({
   customerPhone,
   followUp,
   canEdit = true,
+  nextFollowUpAt,
+  isEarly = false,
 }: {
   leadId: string
   leadNo: string
@@ -38,10 +40,13 @@ export function FollowUpButtonModal({
   customerPhone: string
   followUp: FollowUpItem
   canEdit?: boolean
+  nextFollowUpAt?: string
+  isEarly?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const isDone = followUp.status === 'done'
   const waDigits = toWhatsAppDigits(customerPhone)
+
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -135,12 +140,22 @@ export function FollowUpButtonModal({
           </div>
         ) : null}
 
+        {isEarly ? (
+          <div className="rounded-xl border border-tone-warning/40 bg-tone-warning-soft p-3 text-xs text-tone-warning-soft-foreground">
+            <p className="font-semibold">Notice: Scheduled follow-up time has not arrived yet</p>
+            <p className="mt-1">
+              Follow-Up {followUp.number} is scheduled for {formatPktDateTime(new Date(nextFollowUpAt!))}. You can still complete and record this follow-up early. It will be logged in the lead activity timeline.
+            </p>
+          </div>
+        ) : null}
+
         {/* Follow-up Details & Completion Form */}
         {canEdit ? (
           <ActionForm action={recordFollowUpAction} className="space-y-4 pt-1">
             <input type="hidden" name="leadId" value={leadId} />
             <input type="hidden" name="number" value={followUp.number} />
             <input type="hidden" name="completed" value="true" />
+            <input type="hidden" name="isEarly" value={isEarly ? 'true' : 'false'} />
 
             <div className="space-y-1.5">
               <label htmlFor={`outcome-${leadId}-${followUp.number}`} className="block text-sm font-medium">

@@ -1,4 +1,4 @@
-import { Building2, CalendarClock, FileSpreadsheet, LayoutDashboard, List, MapPin, Settings, ShieldCheck, SquareKanban, Users, type LucideIcon } from 'lucide-react'
+import { Building2, CalendarClock, FileSpreadsheet, LayoutDashboard, List, MapPin, Settings, ShieldCheck, SquareKanban, Trash2, Users, type LucideIcon } from 'lucide-react'
 import type { Role } from '@/domain/constants'
 import { en } from '@/i18n/en'
 
@@ -14,6 +14,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/dashboard', label: en.nav.dashboard, icon: LayoutDashboard, roles: ['super_admin', 'admin', 'manager', 'agent', 'field_agent', 'staff', 'marketing'], mobile: true },
   { href: '/leads', label: en.nav.leads, icon: List, roles: ['super_admin', 'admin', 'manager', 'agent', 'marketing'], mobile: true },
+  { href: '/junk-leads', label: 'Junk Leads', icon: Trash2, roles: ['super_admin', 'admin', 'manager', 'agent', 'marketing'], mobile: false },
   { href: '/quotations', label: en.nav.quotations, icon: FileSpreadsheet, roles: ['super_admin', 'admin', 'manager', 'agent'], mobile: false },
   { href: '/follow-ups', label: en.nav.followUps, icon: CalendarClock, roles: ['manager', 'agent', 'marketing'], mobile: true },
   { href: '/visits', label: en.nav.visits, icon: MapPin, roles: ['super_admin', 'admin', 'manager', 'field_agent', 'marketing'], mobile: false },

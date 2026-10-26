@@ -30,11 +30,11 @@ vi.mock('next/cache', () => ({
 
 const { ALL_MODELS, BackupRecord, Department, FollowUp, Lead, Quotation, User, WhatsAppNumber } = await import('@/server/db/models')
 const { ingestLead } = await import('@/server/services/ingest')
-const { isLeadLockedForAgent, requestLeadUnlock, reviewLeadUnlock } = await import('@/server/services/leads')
+const { isLeadLockedForAgent, requestLeadUnlock, reviewLeadUnlock, moveToJunk, revertJunk, markQuotationSent, purgeAllJunkLeads } = await import('@/server/services/leads')
 const { loadLeadFor } = await import('@/server/auth/guards')
 const { recordFollowUpAction, disconnectAgentWhatsAppAction } = await import('@/server/actions')
 const { createStandaloneQuotation, listCentralQuotations, updateQuotationStatus } = await import('@/server/services/quotations')
-const { runAutomatedBackup, checkAutomatedBackupIfDue, listBackups, restoreBackup } = await import('@/server/services/backup')
+const { runAutomatedBackup, checkAutomatedBackupIfDue, listBackups, restoreBackup, getDatabaseStorageStats, wipeDevDatabase, wipeBackupDatabase, purgeNotifications } = await import('@/server/services/backup')
 const { defaultQuotation } = await import('@/domain/quotation')
 
 type SessionUser = import('@/server/auth/session').SessionUser
@@ -304,3 +304,112 @@ describe('5. Agent-Level WhatsApp Connection and Disconnection', () => {
     expect(updated?.agentId).toBeNull()
   })
 })
+describe('6. Junk Leads Workflow (Move to Junk, Manager Revert & Purge)', () => {
+  let junkLeadId = ''
+
+  beforeAll(async () => {
+    const rJ = await ingestLead({ name: 'Junk Candidate', phone: '+923003333333', city: 'Islamabad', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
+    junkLeadId = 'leadId' in rJ ? rJ.leadId : ''
+    await Lead.updateOne({ _id: junkLeadId }, { $set: { 'assignment.state': 'accepted' } })
+  })
+
+  it('moves lead to junk with actor name and cancels pending followups', async () => {
+    await moveToJunk(agentUser, junkLeadId, 'Invalid contact details')
+    const junked = await Lead.findById(junkLeadId).lean()
+    expect(junked?.status).toBe('junk')
+    expect(junked?.junkedBy?.name).toBe(agentUser.name)
+    expect(junked?.nextFollowUpAt).toBeNull()
+
+    const { Activity } = await import('@/server/db/models')
+    const act = await Activity.findOne({ leadId: junkLeadId, type: 'status_changed' }).sort({ at: -1 }).lean()
+    expect(act).toBeTruthy()
+    expect(act?.data?.junkedBy).toBe(agentUser.name)
+  })
+
+  it('blocks agents from reverting a junk lead', async () => {
+    await expect(revertJunk(agentUser, junkLeadId)).rejects.toThrow(/manager or admin/i)
+  })
+
+  it('allows manager to revert junk lead back to active status', async () => {
+    await revertJunk(managerUser, junkLeadId)
+    const restored = await Lead.findById(junkLeadId).lean()
+    expect(restored?.status).toBe('open')
+    expect(restored?.stage).toBe('new')
+    expect(restored?.reopenedAt).toBeTruthy()
+  })
+
+  it('allows manager to purge all junk leads', async () => {
+    await moveToJunk(managerUser, junkLeadId, 'Permanently delete this test')
+    const res = await purgeAllJunkLeads(managerUser)
+    expect(res.count).toBeGreaterThanOrEqual(1)
+
+    const check = await Lead.findById(junkLeadId).lean()
+    expect(check).toBeNull()
+  })
+})
+
+describe('7. Quotation Sent Confirmation & Lead Stage Advancement', () => {
+  it('marks quotation as sent on lead and updates stage', async () => {
+    await markQuotationSent(agentUser, leadAId, 'quote-test-123')
+    const updated = await Lead.findById(leadAId).lean()
+    expect(updated?.quotationSent).toBe(true)
+    expect(updated?.quotationSentAt).toBeTruthy()
+    expect(updated?.stage).toBe('quotation_sent')
+  })
+})
+
+describe('8. Early Follow-Up Execution & Timeline Logging', () => {
+  it('records early follow-up note and logs to activity timeline', async () => {
+    const { startSession } = await import('@/server/auth/session')
+    await startSession(agentUser.id)
+
+    const fd = new FormData()
+    fd.set('leadId', leadAId)
+    fd.set('number', '2')
+    fd.set('completed', 'true')
+    fd.set('outcome', 'Connected')
+    fd.set('notes', 'Discussed 10kW hybrid inverter early')
+    fd.set('isEarly', 'true')
+
+    const res = await recordFollowUpAction({ ok: true }, fd)
+    expect(res?.ok).toBe(true)
+
+    const { Activity } = await import('@/server/db/models')
+    const act = await Activity.findOne({ leadId: leadAId, type: 'follow_up_completed', 'data.number': 2 }).lean()
+    expect(act).toBeTruthy()
+    expect(act?.data?.early).toBe(true)
+    expect(act?.data?.notes).toContain('Early Follow-up 2 completed ahead of scheduled time')
+  })
+})
+
+describe('9. Database Storage Stats & Wiping Security Guards', () => {
+  it('returns database storage stats with 512 MB free tier tracking', async () => {
+    const stats = await getDatabaseStorageStats()
+    expect(stats.freeTierLimitMb).toBe(512)
+    expect(stats.remainingMb).toBeGreaterThan(0)
+    expect(typeof stats.totalUsedMb).toBe('number')
+  })
+
+  it('blocks non-admin users from wiping dev or backup database', async () => {
+    await expect(wipeDevDatabase(agentUser)).rejects.toThrow(/administrator/i)
+    await expect(wipeBackupDatabase(managerUser)).rejects.toThrow(/administrator/i)
+  })
+
+  it('purges notifications and records audit log', async () => {
+    const { Notification } = await import('@/server/db/models')
+    await Notification.create({
+      userId: agentUser.id,
+      type: 'manager_ping',
+      title: 'Test Notification',
+      body: 'This is a test notification to purge',
+      dedupeKey: `test_notif_${Date.now()}`,
+    })
+
+    const res = await purgeNotifications(managerUser)
+    expect(res.count).toBeGreaterThanOrEqual(1)
+
+    const count = await Notification.countDocuments()
+    expect(count).toBe(0)
+  })
+})
+

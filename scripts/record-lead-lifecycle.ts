@@ -2,9 +2,7 @@ import { chromium, type Page } from '@playwright/test'
 import * as path from 'path'
 import * as fs from 'fs'
 import { connectDb } from '../src/server/db/connection'
-import { Contact, Department, Lead, LeadAssignment, User, ContactAttempt, Activity, FollowUp } from '../src/server/db/models'
-import { hashPassword } from '../src/server/auth/password'
-import { oid } from '../src/server/services/common'
+import { Contact, Department, Lead, User, ContactAttempt, Activity, FollowUp } from '../src/server/db/models'
 
 const OUT_DIR = path.resolve(process.cwd(), 'public/guide/lifecycle')
 if (!fs.existsSync(OUT_DIR)) {
@@ -176,7 +174,7 @@ async function main() {
   const leftTime = new Date(now.getTime() - 110_000)
   const returnTime = new Date(now.getTime() - 20_000)
 
-  const attempt1 = await ContactAttempt.create({
+  await ContactAttempt.create({
     leadId: lead._id,
     agentId: agentUser._id,
     channel: 'call',
@@ -242,7 +240,7 @@ async function main() {
   // Day 2: Customer is Interested
   console.log('Simulating Day 2: Customer Interested...')
   const day2Time = new Date(now.getTime() + 86_400_000)
-  const attempt2 = await ContactAttempt.create({
+  await ContactAttempt.create({
     leadId: lead._id,
     agentId: agentUser._id,
     channel: 'call',

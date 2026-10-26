@@ -10,14 +10,17 @@ import { AlertPrefsForm } from '@/components/crm/alert-prefs-form'
 import { MetaLeadsPanel } from '@/components/crm/meta-leads-panel'
 import { ProofStorage } from '@/components/crm/proof-storage'
 import { BackupPanel } from '@/components/crm/backup-panel'
-import { listBackups } from '@/server/services/backup'
+import { DbStorageCard } from '@/components/crm/db-storage-card'
+import { CrmCleanupCard } from '@/components/crm/crm-cleanup-card'
+import { getAllDatabasesStorageStats, getDatabaseStorageStats, listBackups } from '@/server/services/backup'
+import { getJunkLeadsCount } from '@/server/services/leads'
 import { SheetSources } from '@/components/crm/sheet-sources'
 import { WhatsAppNumbersPanel } from '@/components/crm/whatsapp-numbers-panel'
 import type { SheetTabStatus } from '@/domain/sheet-columns'
 import { requireRole, type SessionUser } from '@/server/auth/session'
 import { isAdminRole } from '@/server/auth/scope'
 import { connectDb } from '@/server/db/connection'
-import { Lead, User, WhatsAppNumber } from '@/server/db/models'
+import { Lead, Notification, SheetRow, User, WhatsAppNumber } from '@/server/db/models'
 import { saveNotificationSettingsAction, saveThemeAction, saveWorkingHoursAction } from '@/server/actions'
 import { cloudinaryUsage } from '@/server/services/cloudinary'
 import { metaMissing } from '@/server/services/meta-leads'
@@ -47,7 +50,7 @@ const SECTIONS: SectionDef[] = [
   { key: 'notifications', title: 'System notifications', description: 'Master switch to mute or turn on all app and push alerts.', icon: BellOff },
   { key: 'my-alerts', title: 'My alerts', description: 'Choose which employee actions you are told about — for everyone or some people.', icon: Bell },
   { key: 'proof-storage', title: 'Proof storage', description: 'See how much space call / chat screenshots use, and clear old ones.', icon: HardDrive },
-  { key: 'crm-backups', title: 'CRM Backups', description: 'Automated 30-day snapshots of leads, customer records, WhatsApp history, and quotations.', icon: Database, adminOnly: true },
+  { key: 'crm-backups', title: 'Database Storage & Backups', description: 'Monitor MB usage across Main, Dev, Backup DBs (512 MB Free Tier), prune junk leads, and run 30-day backups.', icon: Database },
   { key: 'google-sheets', title: 'Google Sheets', description: 'Connect a leads Sheet; new rows come in every minute.', icon: FileSpreadsheet },
   { key: 'meta-leads', title: 'Meta lead forms', description: 'Facebook / Instagram form leads straight into the CRM; form → department.', icon: Megaphone, adminOnly: true },
   { key: 'whatsapp-numbers', title: 'WhatsApp numbers', description: 'Connect company WhatsApp numbers and say whose phone each is on.', icon: MessageCircle, adminOnly: true },
@@ -89,18 +92,19 @@ export default async function SettingsPage(props: PageProps<'/settings'>) {
 
 /** Small live status on each card. */
 async function hubBadges(user: SessionUser, admin: boolean): Promise<Record<string, Pick<HubItem, 'badge' | 'badgeTone'>>> {
-  const [sheets, sheetStatus, waCount, notif] = await Promise.all([
+  const [sheets, sheetStatus, waCount, notif, dbStats] = await Promise.all([
     getSheetSources(),
     getSetting('sheet_status'),
     admin ? WhatsAppNumber.countDocuments({ status: 'connected' }) : Promise.resolve(0),
     getSetting('notifications'),
+    getDatabaseStorageStats(),
   ])
   const mine = admin ? sheets : sheets.filter((s) => s.department === user.departmentCode)
   const stopped = mine.some((s) => s.tabs.some((t) => sheetStatus[statusKey(s, t)]?.problem))
   const metaOn = !metaMissing().some((k) => k === 'META_PAGE_ID' || k === 'META_PAGE_ACCESS_TOKEN')
   return {
     notifications: notif.enabled ? { badge: 'Active', badgeTone: 'ok' } : { badge: 'Muted', badgeTone: 'warn' },
-    'crm-backups': { badge: '30-Day Auto', badgeTone: 'ok' },
+    'crm-backups': { badge: `${dbStats.totalUsedMb} MB used`, badgeTone: 'ok' },
     'google-sheets': mine.length ? (stopped ? { badge: 'A tab has stopped', badgeTone: 'warn' } : { badge: `${mine.length} connected`, badgeTone: 'ok' }) : { badge: 'None connected', badgeTone: 'plain' },
     'meta-leads': metaOn ? { badge: 'Connected', badgeTone: 'ok' } : { badge: 'Not connected', badgeTone: 'warn' },
     'whatsapp-numbers': waCount ? { badge: `${waCount} connected`, badgeTone: 'ok' } : { badge: 'None connected', badgeTone: 'plain' },
@@ -113,8 +117,25 @@ async function SectionBody({ section, user, admin }: { section: string; user: Se
 
   switch (section) {
     case 'crm-backups': {
-      const backups = await listBackups()
-      return <BackupPanel backups={backups} />
+      const [backups, allDbStats, junkCount, notifsCount, sheetRowsCount] = await Promise.all([
+        listBackups(),
+        getAllDatabasesStorageStats(),
+        getJunkLeadsCount(user),
+        Notification.countDocuments(),
+        SheetRow.countDocuments(),
+      ])
+      return (
+        <div className="space-y-6">
+          <DbStorageCard stats={allDbStats} isAdmin={admin} />
+          <CrmCleanupCard
+            junkLeadsCount={junkCount}
+            notificationsCount={notifsCount}
+            logsCount={sheetRowsCount}
+            isAdmin={admin}
+          />
+          <BackupPanel backups={backups} />
+        </div>
+      )
     }
     case 'notifications': {
       const notif = await getSetting('notifications')

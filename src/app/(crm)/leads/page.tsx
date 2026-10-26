@@ -14,12 +14,13 @@ import { AssignmentBadge, SourceBadge } from '@/components/crm/badges'
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
 import { AssignLeadDialog } from '@/components/crm/assign-lead-dialog'
 import { ActionForm } from '@/components/common/action-form'
-import { pullSheetAction, requestLeadUnlockAction, reviewLeadUnlockAction } from '@/server/actions'
+import { pullSheetAction, requestLeadUnlockAction, reviewLeadUnlockAction, revertJunkAction } from '@/server/actions'
+import { MoveToJunkButton } from '@/components/crm/move-to-junk-button'
 import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone, maskPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
-import { ArrowLeft, List, Lock, Users } from 'lucide-react'
+import { ArrowLeft, List, Lock, RotateCcw, Users } from 'lucide-react'
 import { FollowUpButtonModal } from '@/components/crm/follow-up-modal'
 import { SendQuotationDialog } from '@/components/crm/send-quotation-dialog'
 import { LEAD_VIEWS, PAGE_SIZE, employeeLeadStats, getAssignableAgents, getQueuePanels, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
@@ -46,7 +47,8 @@ const VIEW_LABEL: Record<LeadView, string> = {
   interested: 'Interested',
   won: 'Won',
   lost: 'Lost',
-  unreachable: 'Dead / junk',
+  unreachable: 'Dead / unreachable',
+  junk: 'Junk Leads',
   any: 'Everything',
 }
 
@@ -194,6 +196,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
             customerPhone={l.phone}
             followUp={fu}
             canEdit={user.role === 'agent' ? !l.isLocked : true}
+            nextFollowUpAt={l.nextFollowUpAt}
           />
         )
       },
@@ -211,10 +214,56 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
             customerPhone={l.phone}
             followUp={fu}
             canEdit={user.role === 'agent' ? !l.isLocked : true}
+            nextFollowUpAt={l.nextFollowUpAt}
           />
         )
       },
     },
+    {
+      key: 'junkAction',
+      header: '',
+      cell: (l) => (
+        <MoveToJunkButton
+          leadId={l.id}
+          leadNo={l.leadNo}
+          customerName={l.name}
+          canEdit={user.role === 'agent' ? !l.isLocked : true}
+        />
+      ),
+    },
+    ...(view === 'junk'
+      ? [
+          {
+            key: 'junkedBy',
+            header: 'Junked By',
+            cell: (l: LeadSummary) => (
+              <div className="text-xs">
+                <span className="font-medium text-foreground">{l.junkedBy?.name ?? 'CRM User'}</span>
+                {l.junkedBy?.at ? (
+                  <span className="block text-muted-foreground">{formatPktDateTime(new Date(l.junkedBy.at))}</span>
+                ) : null}
+              </div>
+            ),
+          },
+          ...(canDelete
+            ? [
+                {
+                  key: 'revert',
+                  header: 'Restore',
+                  cell: (l: LeadSummary) => (
+                    <ActionForm action={revertJunkAction}>
+                      <input type="hidden" name="leadId" value={l.id} />
+                      <Button type="submit" size="xs" variant="outline" className="h-8 gap-1 text-xs">
+                        <RotateCcw className="size-3" aria-hidden />
+                        <span>Revert to New</span>
+                      </Button>
+                    </ActionForm>
+                  ),
+                },
+              ]
+            : []),
+        ]
+      : []),
     {
       key: 'quote',
       header: 'Quotation',
@@ -224,6 +273,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           leadNo={l.leadNo}
           customerName={l.name}
           customerPhone={l.phone}
+          quotationSent={l.quotationSent}
         />
       ),
     },

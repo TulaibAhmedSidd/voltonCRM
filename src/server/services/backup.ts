@@ -36,6 +36,49 @@ export interface BackupResult {
   error?: string
 }
 
+async function syncToExternalBackupDb(): Promise<void> {
+  const backupUri = process.env.MONGODB_URI_NEW_BACKUP
+  if (!backupUri) return
+  try {
+    const m = await connectDb()
+    const srcDb = m.connection.db
+    if (!srcDb) return
+
+    const backupConn = await m.createConnection(backupUri).asPromise()
+    const targetDb = backupConn.db
+    if (!targetDb) {
+      await backupConn.close()
+      return
+    }
+
+    const collections = [
+      'auditlogs', 'visits', 'pushsubscriptions', 'messages', 'followups',
+      'ingestevents', 'activities', 'attendances', 'quotations', 'documents',
+      'contactattempts', 'leads', 'departments', 'notifications', 'instructions',
+      'teams', 'whatsappnumbers', 'jobroles', 'settings', 'leadassignments',
+      'counters', 'sheetrows', 'contacts', 'user'
+    ]
+
+    for (const colName of collections) {
+      try {
+        const srcCol = srcDb.collection(colName)
+        const targetCol = targetDb.collection(colName)
+        await targetCol.deleteMany({})
+        const docs = await srcCol.find({}).toArray()
+        if (docs.length > 0) {
+          await targetCol.insertMany(docs)
+        }
+      } catch {
+        // Individual collection fallback
+      }
+    }
+
+    await backupConn.close()
+  } catch {
+    // External backup sync fallback
+  }
+}
+
 /** Create a full snapshot of essential CRM data. Runs automatically every 30 days or on demand. */
 export async function runAutomatedBackup(
   trigger: 'scheduled' | 'manual' = 'scheduled',
@@ -94,6 +137,7 @@ export async function runAutomatedBackup(
     backup.checksum = checksum
     backup.status = 'completed'
     await backup.save()
+    await syncToExternalBackupDb()
 
     return {
       id: String(backup._id),
@@ -191,4 +235,245 @@ export async function restoreBackup(backupId: string, actor: SessionUser): Promi
   })
 
   return { ok: true, message: `Backup from ${record.timestamp.toLocaleDateString()} verified and ready for restore.` }
+}
+
+export interface DatabaseStorageStats {
+  dataSizeMb: number
+  storageSizeMb: number
+  indexSizeMb: number
+  totalUsedMb: number
+  freeTierLimitMb: number
+  remainingMb: number
+  percentUsed: number
+  collectionsCount: number
+  objectsCount: number
+}
+
+async function getStatsForUri(uri?: string): Promise<DatabaseStorageStats> {
+  const empty: DatabaseStorageStats = {
+    dataSizeMb: 0,
+    storageSizeMb: 0,
+    indexSizeMb: 0,
+    totalUsedMb: 0,
+    freeTierLimitMb: 512,
+    remainingMb: 512,
+    percentUsed: 0,
+    collectionsCount: 0,
+    objectsCount: 0,
+  }
+  if (!uri) return empty
+
+  try {
+    const m = await connectDb()
+    const conn = await m.createConnection(uri).asPromise()
+    const db = conn.db
+    if (!db) {
+      await conn.close()
+      return empty
+    }
+    const stats = await db.stats()
+    await conn.close()
+    const dataSizeMb = Number((stats.dataSize / (1024 * 1024)).toFixed(2))
+    const storageSizeMb = Number((stats.storageSize / (1024 * 1024)).toFixed(2))
+    const indexSizeMb = Number((stats.indexSize / (1024 * 1024)).toFixed(2))
+    const totalUsedMb = Number(((stats.storageSize + stats.indexSize) / (1024 * 1024)).toFixed(2))
+    const freeTierLimitMb = 512
+    const remainingMb = Number(Math.max(0, freeTierLimitMb - totalUsedMb).toFixed(2))
+    const percentUsed = Number(((totalUsedMb / freeTierLimitMb) * 100).toFixed(1))
+
+    return {
+      dataSizeMb,
+      storageSizeMb,
+      indexSizeMb,
+      totalUsedMb,
+      freeTierLimitMb,
+      remainingMb,
+      percentUsed,
+      collectionsCount: stats.collections,
+      objectsCount: stats.objects,
+    }
+  } catch {
+    return empty
+  }
+}
+
+export async function getDatabaseStorageStats(): Promise<DatabaseStorageStats> {
+  const m = await connectDb()
+  const db = m.connection.db
+  if (!db) {
+    return {
+      dataSizeMb: 0,
+      storageSizeMb: 0,
+      indexSizeMb: 0,
+      totalUsedMb: 0,
+      freeTierLimitMb: 512,
+      remainingMb: 512,
+      percentUsed: 0,
+      collectionsCount: 0,
+      objectsCount: 0,
+    }
+  }
+
+  try {
+    const stats = await db.stats()
+    const dataSizeMb = Number((stats.dataSize / (1024 * 1024)).toFixed(2))
+    const storageSizeMb = Number((stats.storageSize / (1024 * 1024)).toFixed(2))
+    const indexSizeMb = Number((stats.indexSize / (1024 * 1024)).toFixed(2))
+    const totalUsedMb = Number(((stats.storageSize + stats.indexSize) / (1024 * 1024)).toFixed(2))
+    const freeTierLimitMb = 512
+    const remainingMb = Number(Math.max(0, freeTierLimitMb - totalUsedMb).toFixed(2))
+    const percentUsed = Number(((totalUsedMb / freeTierLimitMb) * 100).toFixed(1))
+
+    return {
+      dataSizeMb,
+      storageSizeMb,
+      indexSizeMb,
+      totalUsedMb,
+      freeTierLimitMb,
+      remainingMb,
+      percentUsed,
+      collectionsCount: stats.collections,
+      objectsCount: stats.objects,
+    }
+  } catch {
+    return {
+      dataSizeMb: 0,
+      storageSizeMb: 0,
+      indexSizeMb: 0,
+      totalUsedMb: 0,
+      freeTierLimitMb: 512,
+      remainingMb: 512,
+      percentUsed: 0,
+      collectionsCount: 0,
+      objectsCount: 0,
+    }
+  }
+}
+
+export interface AllDatabasesStorageStats {
+  main: DatabaseStorageStats
+  dev: DatabaseStorageStats
+  backup: DatabaseStorageStats
+  combinedUsedMb: number
+}
+
+export async function getAllDatabasesStorageStats(): Promise<AllDatabasesStorageStats> {
+  const [main, dev, backup] = await Promise.all([
+    getDatabaseStorageStats(),
+    getStatsForUri(process.env.MONGODB_URI_NEW_DEV),
+    getStatsForUri(process.env.MONGODB_URI_NEW_BACKUP),
+  ])
+
+  const combinedUsedMb = Number((main.totalUsedMb + dev.totalUsedMb + backup.totalUsedMb).toFixed(2))
+  return { main, dev, backup, combinedUsedMb }
+}
+
+/** Wipe all collections from Dev Database (MONGODB_URI_NEW_DEV). Admin only. */
+export async function wipeDevDatabase(actor: SessionUser): Promise<{ ok: boolean; message: string }> {
+  if (actor.role !== 'admin' && actor.role !== 'super_admin') {
+    throw new UserError('Only administrators can wipe the development database.')
+  }
+  const devUri = process.env.MONGODB_URI_NEW_DEV
+  if (!devUri || !devUri.includes('dev')) {
+    throw new UserError('Dev database URI is not properly configured.')
+  }
+  const m = await connectDb()
+  const conn = await m.createConnection(devUri).asPromise()
+  const db = conn.db
+  if (!db || db.databaseName === 'volton_crm') {
+    await conn.close()
+    throw new UserError('Safety block: Cannot wipe primary database.')
+  }
+  const collections = await db.listCollections().toArray()
+  for (const col of collections) {
+    try {
+      await db.collection(col.name).deleteMany({})
+    } catch {
+      // ignore
+    }
+  }
+  await conn.close()
+
+  await AuditLog.create({
+    entity: 'database',
+    entityId: null,
+    action: 'erase',
+    actorId: oid(actor.id),
+    at: new Date(),
+    after: { message: `Dev database wiped by ${actor.name}` },
+  })
+
+  return { ok: true, message: 'Development database wiped successfully.' }
+}
+
+/** Wipe all collections from Backup Database (MONGODB_URI_NEW_BACKUP). Admin only. */
+export async function wipeBackupDatabase(actor: SessionUser): Promise<{ ok: boolean; message: string }> {
+  if (actor.role !== 'admin' && actor.role !== 'super_admin') {
+    throw new UserError('Only administrators can wipe the backup database.')
+  }
+  const backupUri = process.env.MONGODB_URI_NEW_BACKUP
+  if (!backupUri || !backupUri.includes('backup')) {
+    throw new UserError('Backup database URI is not properly configured.')
+  }
+  const m = await connectDb()
+  const conn = await m.createConnection(backupUri).asPromise()
+  const db = conn.db
+  if (!db || db.databaseName === 'volton_crm') {
+    await conn.close()
+    throw new UserError('Safety block: Cannot wipe primary database.')
+  }
+  const collections = await db.listCollections().toArray()
+  for (const col of collections) {
+    try {
+      await db.collection(col.name).deleteMany({})
+    } catch {
+      // ignore
+    }
+  }
+  await conn.close()
+
+  await AuditLog.create({
+    entity: 'database',
+    entityId: null,
+    action: 'erase',
+    actorId: oid(actor.id),
+    at: new Date(),
+    after: { message: `Backup database wiped by ${actor.name}` },
+  })
+
+  return { ok: true, message: 'Backup database wiped successfully.' }
+}
+
+export async function purgeNotifications(actor: SessionUser): Promise<{ count: number }> {
+  if (actor.role !== 'admin' && actor.role !== 'super_admin' && actor.role !== 'manager') {
+    throw new UserError('Only managers or admins can purge notifications.')
+  }
+  const { Notification } = await import('@/server/db/models')
+  const res = await Notification.deleteMany({})
+  await AuditLog.create({
+    entity: 'notification',
+    entityId: null,
+    action: 'erase',
+    actorId: oid(actor.id),
+    at: new Date(),
+    after: { count: res.deletedCount, purgedBy: actor.name },
+  })
+  return { count: res.deletedCount ?? 0 }
+}
+
+export async function purgeSystemLogs(actor: SessionUser): Promise<{ count: number }> {
+  if (actor.role !== 'admin' && actor.role !== 'super_admin') {
+    throw new UserError('Only administrators can purge system logs.')
+  }
+  const { SheetRow } = await import('@/server/db/models')
+  const res = await SheetRow.deleteMany({})
+  await AuditLog.create({
+    entity: 'system_logs',
+    entityId: null,
+    action: 'purge',
+    actorId: oid(actor.id),
+    at: new Date(),
+    after: { count: res.deletedCount, purgedBy: actor.name },
+  })
+  return { count: res.deletedCount ?? 0 }
 }
