@@ -9,6 +9,7 @@ import { getSetting, isOpen } from '@/server/services/settings'
 import { retryStoredEvents } from '@/server/services/whatsapp'
 import { syncMetaLeadsIfDue } from '@/server/services/meta-leads'
 import { checkAutomatedBackupIfDue } from '@/server/services/backup'
+import { unlockAllPreviousLeads } from '@/server/services/leads'
 
 /** Lease lock so overlapping cron calls (cron-job.org + app polling) never double-process. */
 export async function withLock<T>(name: string, ttlMs: number, fn: () => Promise<T>): Promise<T | null> {
@@ -57,6 +58,7 @@ export async function runTick(): Promise<{ processed: number; drained: number } 
     await retryStoredEvents().catch((error) => console.error('[tick] webhook retry', error))
     await syncMetaLeadsIfDue().catch((error) => console.error('[tick] meta leads sync', error))
     await checkAutomatedBackupIfDue(now).catch((error) => console.error('[tick] backup check', error))
+    await unlockAllPreviousLeads().catch((error) => console.error('[tick] unlock old leads', error))
     const drained = await drainQueue()
     return { processed, drained }
   })

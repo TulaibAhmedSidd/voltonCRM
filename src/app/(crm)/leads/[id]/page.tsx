@@ -27,7 +27,7 @@ import { en } from '@/i18n/en'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { requireUser } from '@/server/auth/session'
 import { isManagerOrAdmin } from '@/server/auth/scope'
-import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, eraseCustomerAction, changeStageAction, createVisitAction, requestLeadUnlockAction, reviewLeadUnlockAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
+import { acceptLeadAction, addNoteAction, assignLeadAction, deleteLeadsAction, eraseCustomerAction, changeStageAction, createVisitAction, saveSiteAction, transferDepartmentAction } from '@/server/actions'
 import { getAssignableAgents, getLeadDetail } from '@/server/services/queries'
 import { AGENT_STAGES, isLeadLockedForAgent, reopenStages } from '@/server/services/leads'
 import { ReopenLeadCard } from '@/components/crm/reopen-lead-card'
@@ -79,7 +79,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
     site.installTimeline ? en.installTimeline[site.installTimeline as keyof typeof en.installTimeline] : null,
   ].filter(Boolean)
 
-  const isLocked = user.role === 'agent' && (await isLeadLockedForAgent(user.id, { _id: lead.id, status: lead.status, unlockedForAgent: lead.unlockedForAgent, assignment: { state: lead.assignmentState } }))
+  const isLocked = user.role === 'agent' && (await isLeadLockedForAgent(user.id, { _id: lead.id, status: lead.status, unlockedForAgent: lead.unlockedForAgent, receivedAt: lead.receivedAt, assignment: { state: lead.assignmentState } }))
 
   const allowedPrefixes = ['/leads', '/junk-leads', '/pipeline', '/dashboard', '/follow-ups', '/quotations', '/review']
   const returnTo = typeof sp.returnTo === 'string' && allowedPrefixes.some((p) => (sp.returnTo as string).startsWith(p))
@@ -136,47 +136,13 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
       />
       {isLocked && (
         <div className="rounded-xl border border-tone-warning/40 bg-tone-warning-soft p-4 text-tone-warning-soft-foreground">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <Lock className="size-5 shrink-0" aria-hidden />
-              <div>
-                <p className="font-semibold text-sm">This Lead is Locked</p>
-                <p className="text-xs">
-                  {lead.unlockRequested
-                    ? 'You have requested an unlock for this lead. Awaiting manager approval.'
-                    : 'You must complete all 3 follow-ups on your active lead before working this lead.'}
-                </p>
-              </div>
-            </div>
-            {!lead.unlockRequested && (
-              <ActionForm action={requestLeadUnlockAction}>
-                <input type="hidden" name="leadId" value={lead.id} />
-                <SubmitButton size="touch" pendingText="Requesting…">
-                  Request Lead from Manager
-                </SubmitButton>
-              </ActionForm>
-            )}
-          </div>
-        </div>
-      )}
-      {lead.unlockRequested && manager && (
-        <div className="rounded-xl border border-tone-info/40 bg-tone-info-soft p-4 text-tone-info-soft-foreground">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Lock className="size-5 shrink-0" aria-hidden />
             <div>
-              <p className="font-semibold text-sm">Agent Requested Lead Unlock</p>
-              <p className="text-xs">The assigned agent requested approval to work this lead ahead of sequence.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <ActionForm action={reviewLeadUnlockAction}>
-                <input type="hidden" name="leadId" value={lead.id} />
-                <input type="hidden" name="decision" value="approve" />
-                <SubmitButton size="touch">Approve & Unlock</SubmitButton>
-              </ActionForm>
-              <ActionForm action={reviewLeadUnlockAction}>
-                <input type="hidden" name="leadId" value={lead.id} />
-                <input type="hidden" name="decision" value="reject" />
-                <SubmitButton size="touch" variant="outline">Reject</SubmitButton>
-              </ActionForm>
+              <p className="font-semibold text-sm">This Lead is Locked</p>
+              <p className="text-xs">
+                You must complete all 3 follow-ups on your active new lead before working this lead.
+              </p>
             </div>
           </div>
         </div>

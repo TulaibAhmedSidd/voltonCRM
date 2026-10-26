@@ -3,7 +3,7 @@ import { DEPARTMENTS, PIPELINES, type Department, type LostReason, type Stage } 
 import { AuditLog, ContactAttempt, Department as DepartmentModel, FollowUp, Lead, LeadAssignment, Team, User, Visit } from '@/server/db/models'
 import type { SessionUser } from '@/server/auth/session'
 import { loadLeadFor } from '@/server/auth/guards'
-import { drainQueue, managersOf, manualAssign, resetAssignment, startAssignment } from '@/server/services/assignment'
+import { drainQueue, manualAssign, resetAssignment, startAssignment } from '@/server/services/assignment'
 import { cancelJobs, isDuplicateKey, logActivity, notify, oid, UserError } from '@/server/services/common'
 
 const STAGE_ORDER: Stage[] = ['new', 'contacted', 'interested', 'requirement_collected', 'site_survey', 'quotation_pending', 'quotation_sent', 'negotiation', 'won', 'lost']
@@ -155,24 +155,56 @@ export async function deleteLeads(user: SessionUser, leadIds: string[], reason: 
 
 /**
  * Agent-level controlled lead locking:
- * An agent must work on assigned leads one at a time.
- * The next lead is locked until the agent has completed the current lead (disposed / closed,
- * or completed 3 follow-ups), unless explicitly unlocked by manager approval.
+ * An agent must work on newly assigned leads (received in the last 24 hours) one at a time.
+ * The next new lead is locked until the agent has completed the current active new lead (disposed / closed,
+ * or completed 3 follow-ups), unless explicitly unlocked.
+ * Leads older than 1 day (24 hours) are NEVER locked for agents, and do not lock subsequent leads.
  */
 export async function isLeadLockedForAgent(
   agentId: string,
-  lead: { _id: unknown; status?: string; unlockedForAgent?: boolean; assignment?: { assignedAt?: Date | null; state?: string } | null },
+  lead: {
+    _id: unknown
+    status?: string
+    unlockedForAgent?: boolean
+    assignment?: { assignedAt?: Date | null; state?: string } | null
+    receivedAt?: Date | string | null
+  },
 ): Promise<boolean> {
   if (lead.status !== 'open' || lead.unlockedForAgent) return false
-  const assignedAt = lead.assignment?.assignedAt
-  if (!assignedAt) return false
 
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000
+  const oneDayAgo = new Date(Date.now() - ONE_DAY_MS)
+
+  let receivedAtDate = lead.receivedAt ? new Date(lead.receivedAt) : null
+  let assignedAtDate = lead.assignment?.assignedAt ? new Date(lead.assignment.assignedAt) : null
+
+  // If receivedAt or assignedAt was not supplied on a partial lead object, lookup from DB
+  if (!receivedAtDate || !assignedAtDate) {
+    const fullLead = await Lead.findById(lead._id).select('receivedAt assignment.assignedAt').lean()
+    if (fullLead) {
+      if (!receivedAtDate && fullLead.receivedAt) receivedAtDate = new Date(fullLead.receivedAt)
+      if (!assignedAtDate && fullLead.assignment?.assignedAt) assignedAtDate = new Date(fullLead.assignment.assignedAt)
+    }
+  }
+
+  // Leads older than 24 hours are never locked
+  if (receivedAtDate && !isNaN(receivedAtDate.getTime()) && receivedAtDate.getTime() < oneDayAgo.getTime()) {
+    return false
+  }
+  if (assignedAtDate && !isNaN(assignedAtDate.getTime()) && assignedAtDate.getTime() < oneDayAgo.getTime()) {
+    return false
+  }
+
+  if (!assignedAtDate) return false
+
+  // Look for an earlier incomplete lead assigned to this agent THAT IS ALSO A NEW LEAD (received within 24h)
   const earlierIncompleteLead = await Lead.findOne({
     _id: { $ne: lead._id },
     'assignment.agentId': oid(agentId),
     'assignment.state': 'accepted',
     status: 'open',
-    'assignment.assignedAt': { $lt: assignedAt },
+    'assignment.assignedAt': { $lt: assignedAtDate, $gte: oneDayAgo },
+    receivedAt: { $gte: oneDayAgo },
     unlockedForAgent: { $ne: true },
   }).select('_id attemptCount').lean()
 
@@ -186,6 +218,30 @@ export async function isLeadLockedForAgent(
   return completedFollowUps < 3
 }
 
+/**
+ * Unlocks all historical/previous leads older than 24 hours so agents can work freely.
+ * Also clears any pending unlockRequested flags so no approval notifications bother managers.
+ */
+export async function unlockAllPreviousLeads(): Promise<{ modifiedCount: number }> {
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const res = await Lead.updateMany(
+    {
+      $or: [
+        { receivedAt: { $lt: oneDayAgo } },
+        { 'assignment.assignedAt': { $lt: oneDayAgo } },
+        { unlockRequested: true },
+      ],
+    },
+    {
+      $set: {
+        unlockedForAgent: true,
+        unlockRequested: false,
+      },
+    },
+  )
+  return { modifiedCount: res.modifiedCount }
+}
+
 export async function requestLeadUnlock(user: SessionUser, leadId: string): Promise<void> {
   if (user.role !== 'agent') throw new UserError('Only agents request lead unlocking')
   const lead = await loadLeadFor(user, leadId, 'view')
@@ -195,17 +251,7 @@ export async function requestLeadUnlock(user: SessionUser, leadId: string): Prom
 
   await logActivity(lead._id, 'note_added', user.id, { text: 'Agent requested manager approval to unlock lead' })
 
-  const managers = await managersOf(lead.departmentId)
-  if (managers.length) {
-    await notify({
-      userIds: managers,
-      type: 'lead_unlock_request',
-      title: `${user.name} requested to unlock lead ${lead.leadNo}`,
-      body: 'Agent wants to work this lead while another is in progress.',
-      link: `/leads/${lead._id}`,
-      dedupeKey: `unlock_req:${lead._id}:${Date.now()}`,
-    })
-  }
+  // Note: Manager approval notifications paused for now per user instruction.
 }
 
 export async function reviewLeadUnlock(manager: SessionUser, leadId: string, approve: boolean): Promise<void> {

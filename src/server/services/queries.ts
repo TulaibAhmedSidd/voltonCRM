@@ -73,6 +73,7 @@ async function lookups(leads: { _id?: unknown; contactId: unknown; departmentId?
           'assignment.state': 'accepted',
           status: 'open',
           unlockedForAgent: { $ne: true },
+          receivedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
         })
           .sort({ 'assignment.assignedAt': 1 })
           .select('_id')
@@ -140,6 +141,7 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
       user.role === 'agent' &&
       l.status === 'open' &&
       !l.unlockedForAgent &&
+      (l.receivedAt ? new Date(l.receivedAt).getTime() >= Date.now() - 24 * 60 * 60 * 1000 : false) &&
       maps.earliestActiveLeadId !== null &&
       maps.earliestActiveLeadId !== String(l._id),
     unlockRequested: !!l.unlockRequested,

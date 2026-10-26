@@ -30,7 +30,7 @@ vi.mock('next/cache', () => ({
 
 const { ALL_MODELS, BackupRecord, Department, FollowUp, Lead, Quotation, User, WhatsAppNumber } = await import('@/server/db/models')
 const { ingestLead } = await import('@/server/services/ingest')
-const { isLeadLockedForAgent, requestLeadUnlock, reviewLeadUnlock, moveToJunk, revertJunk, markQuotationSent, purgeAllJunkLeads } = await import('@/server/services/leads')
+const { isLeadLockedForAgent, requestLeadUnlock, reviewLeadUnlock, unlockAllPreviousLeads, moveToJunk, revertJunk, markQuotationSent, purgeAllJunkLeads } = await import('@/server/services/leads')
 const { loadLeadFor } = await import('@/server/auth/guards')
 const { recordFollowUpAction, disconnectAgentWhatsAppAction } = await import('@/server/actions')
 const { createStandaloneQuotation, listCentralQuotations, updateQuotationStatus } = await import('@/server/services/quotations')
@@ -148,6 +148,37 @@ describe('1. Controlled Lead Assignment, Locking & Manager Approval', () => {
     const leadC = await Lead.findById(leadCId).lean()
     const locked = await isLeadLockedForAgent(agentUser.id, leadC!)
     expect(locked).toBe(false)
+  })
+  it('does not lock leads older than 24 hours even if active lead is incomplete', async () => {
+    const rOld = await ingestLead({ name: 'Customer Old', phone: '+923004444444', city: 'Multan', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
+    const oldLeadId = 'leadId' in rOld ? rOld.leadId : ''
+    const twoDaysAgo = new Date(Date.now() - 48 * 3600_000)
+    await Lead.updateOne({ _id: oldLeadId }, { $set: { receivedAt: twoDaysAgo, 'assignment.state': 'accepted', 'assignment.assignedAt': twoDaysAgo, unlockedForAgent: false } })
+
+    const oldLead = await Lead.findById(oldLeadId).lean()
+    const locked = await isLeadLockedForAgent(agentUser.id, oldLead!)
+    expect(locked).toBe(false)
+
+    const workOldLead = await loadLeadFor(agentUser, oldLeadId, 'work')
+    expect(String(workOldLead._id)).toBe(oldLeadId)
+  })
+
+  it('an incomplete lead older than 24 hours does not lock a newly received lead', async () => {
+    const rNew = await ingestLead({ name: 'Customer New', phone: '+923005555555', city: 'Peshawar', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
+    const newLeadId = 'leadId' in rNew ? rNew.leadId : ''
+    await Lead.updateOne({ _id: newLeadId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date() } })
+
+    const newLead = await Lead.findById(newLeadId).lean()
+    const locked = await isLeadLockedForAgent(agentUser.id, newLead!)
+    expect(locked).toBe(false)
+  })
+
+  it('unlockAllPreviousLeads unlocks all leads older than 24 hours and clears unlockRequested', async () => {
+    const res = await unlockAllPreviousLeads()
+    expect(res.modifiedCount).toBeGreaterThanOrEqual(1)
+
+    const pendingRequests = await Lead.countDocuments({ unlockRequested: true })
+    expect(pendingRequests).toBe(0)
   })
 })
 

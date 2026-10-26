@@ -14,7 +14,7 @@ import { AssignmentBadge, SourceBadge } from '@/components/crm/badges'
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
 import { AssignLeadDialog } from '@/components/crm/assign-lead-dialog'
 import { ActionForm } from '@/components/common/action-form'
-import { pullSheetAction, requestLeadUnlockAction, reviewLeadUnlockAction, revertJunkAction } from '@/server/actions'
+import { pullSheetAction, revertJunkAction } from '@/server/actions'
 import { MoveToJunkButton } from '@/components/crm/move-to-junk-button'
 import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
@@ -106,44 +106,13 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
             <SourceBadge channel={l.channel} detail={l.sourceDetail} platform={l.platform} isAd={l.isAd} size="sm" />
             {l.isLocked ? (
               <span className="inline-flex items-center gap-1 rounded bg-tone-warning-soft px-1.5 py-0.5 text-xs font-semibold text-tone-warning-soft-foreground">
-                <Lock className="size-3" aria-hidden /> Locked
-              </span>
-            ) : null}
-            {l.unlockRequested ? (
-              <span className="inline-flex items-center gap-1 rounded bg-tone-info-soft px-1.5 py-0.5 text-xs font-semibold text-tone-info-soft-foreground">
-                Unlock Requested
+                <Lock className="size-3" aria-hidden /> Locked (New)
               </span>
             ) : null}
           </div>
           <span className="block text-xs text-muted-foreground">
             {l.maskPhone ? maskPhone(l.phone) : formatPhone(l.phone)} · {l.leadNo}
           </span>
-          {user.role === 'agent' && l.isLocked && !l.unlockRequested ? (
-            <ActionForm action={requestLeadUnlockAction} className="pt-0.5">
-              <input type="hidden" name="leadId" value={l.id} />
-              <Button type="submit" size="xs" variant="outline" className="h-7 text-xs">
-                Request Lead from Manager
-              </Button>
-            </ActionForm>
-          ) : null}
-          {canAssign && l.unlockRequested ? (
-            <div className="flex items-center gap-1 pt-0.5">
-              <ActionForm action={reviewLeadUnlockAction} className="inline-block">
-                <input type="hidden" name="leadId" value={l.id} />
-                <input type="hidden" name="approve" value="true" />
-                <Button type="submit" size="xs" variant="outline" className="h-7 text-xs text-tone-success-soft-foreground">
-                  Approve
-                </Button>
-              </ActionForm>
-              <ActionForm action={reviewLeadUnlockAction} className="inline-block">
-                <input type="hidden" name="leadId" value={l.id} />
-                <input type="hidden" name="approve" value="false" />
-                <Button type="submit" size="xs" variant="ghost" className="h-7 text-xs text-tone-danger-soft-foreground">
-                  Reject
-                </Button>
-              </ActionForm>
-            </div>
-          ) : null}
         </div>
       ),
     },

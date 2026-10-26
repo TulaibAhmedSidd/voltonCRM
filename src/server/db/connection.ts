@@ -5,6 +5,7 @@ import { requireMongoUri } from '@/lib/env'
 
 declare global {
   var __voltonMongoose: Promise<typeof mongoose> | undefined
+  var __voltonUnlockedOldLeads: boolean | undefined
 }
 
 /**
@@ -17,6 +18,12 @@ export function connectDb(uri?: string): Promise<typeof mongoose> {
       .connect(uri ?? requireMongoUri(), { maxPoolSize: 20, maxIdleTimeMS: 60_000, serverSelectionTimeoutMS: 10_000 })
       .then((connected) => {
         attachDatabasePool(connected.connection.getClient())
+        if (!globalThis.__voltonUnlockedOldLeads) {
+          globalThis.__voltonUnlockedOldLeads = true
+          import('@/server/services/leads')
+            .then((m) => m.unlockAllPreviousLeads())
+            .catch((e) => console.error('[db] unlock previous leads error', e))
+        }
         return connected
       })
       .catch((error: unknown) => {
