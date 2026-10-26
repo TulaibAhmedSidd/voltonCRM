@@ -37,7 +37,7 @@ export default async function PipelinePage(props: PageProps<'/pipeline'>) {
                 <span className="text-xs font-medium text-muted-foreground tabular-nums">{cards.length}</span>
               </header>
               {cards.slice(0, 30).map((l) => (
-                <LeadCard key={l.id} lead={l} href={`/leads/${l.id}`} />
+                <LeadCard key={l.id} lead={l} href={`/leads/${l.id}?returnTo=${encodeURIComponent('/pipeline')}`} />
               ))}
               {cards.length > 30 ? (
                 <Link href={`/leads?view=all`} className="block px-1 text-xs text-muted-foreground underline">

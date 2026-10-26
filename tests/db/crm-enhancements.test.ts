@@ -412,4 +412,20 @@ describe('9. Database Storage Stats & Wiping Security Guards', () => {
     expect(count).toBe(0)
   })
 })
+describe('10. Google Drive Backup for voltonsolarenergy@gmail.com', () => {
+  it('returns target email and detects configuration status', async () => {
+    const { getGoogleDriveConfigStatus, backupLeadsToGoogleDrive, backupDatabaseToGoogleDrive } = await import('@/server/services/google-drive-backup')
+    const config = getGoogleDriveConfigStatus()
+    expect(config.targetEmail).toBe('voltonsolarenergy@gmail.com')
+
+    // When credentials are not yet present in test env, safely reports pending setup
+    const leadsRes = await backupLeadsToGoogleDrive(adminUser)
+    expect(leadsRes.ok).toBe(false)
+    expect(leadsRes.message).toContain('voltonsolarenergy@gmail.com')
+
+    const dbRes = await backupDatabaseToGoogleDrive(adminUser)
+    expect(dbRes.ok).toBe(false)
+    expect(dbRes.message).toContain('voltonsolarenergy@gmail.com')
+  })
+})
 

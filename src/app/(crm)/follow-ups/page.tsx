@@ -17,10 +17,10 @@ export default async function FollowUpsPage() {
     <>
       <PageHeader title="Follow-ups" description="Overdue follow-ups turn red and alert your manager." />
       <SectionCard title={`Overdue (${overdue.length})`}>
-        {overdue.length === 0 ? <EmptyState title="Nothing overdue" /> : overdue.map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}`} />)}
+        {overdue.length === 0 ? <EmptyState title="Nothing overdue" /> : overdue.map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}?returnTo=${encodeURIComponent('/follow-ups')}`} />)}
       </SectionCard>
       <SectionCard title={`Upcoming (${upcoming.length})`}>
-        {upcoming.length === 0 ? <EmptyState title="No follow-ups planned" /> : upcoming.map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}`} />)}
+        {upcoming.length === 0 ? <EmptyState title="No follow-ups planned" /> : upcoming.map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}?returnTo=${encodeURIComponent('/follow-ups')}`} />)}
       </SectionCard>
     </>
   )

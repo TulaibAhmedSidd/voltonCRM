@@ -21,7 +21,7 @@ export default async function ReviewPage() {
       <div className="grid gap-4 md:grid-cols-2">
         {queue.map(({ leadId, leadNo, attempt }) => (
           <div key={attempt.id} className="space-y-2">
-            <Link href={`/leads/${leadId}`} className="text-sm font-medium underline">
+            <Link href={`/leads/${leadId}?returnTo=${encodeURIComponent('/review')}`} className="text-sm font-medium underline">
               {leadNo}
             </Link>
             <AttemptCard attempt={attempt} />

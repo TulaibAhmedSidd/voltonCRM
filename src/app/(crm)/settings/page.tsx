@@ -12,6 +12,8 @@ import { ProofStorage } from '@/components/crm/proof-storage'
 import { BackupPanel } from '@/components/crm/backup-panel'
 import { DbStorageCard } from '@/components/crm/db-storage-card'
 import { CrmCleanupCard } from '@/components/crm/crm-cleanup-card'
+import { GoogleDriveBackupCard } from '@/components/crm/google-drive-backup-card'
+import { getGoogleDriveConfigStatus } from '@/server/services/google-drive-backup'
 import { getAllDatabasesStorageStats, getDatabaseStorageStats, listBackups } from '@/server/services/backup'
 import { getJunkLeadsCount } from '@/server/services/leads'
 import { SheetSources } from '@/components/crm/sheet-sources'
@@ -117,16 +119,18 @@ async function SectionBody({ section, user, admin }: { section: string; user: Se
 
   switch (section) {
     case 'crm-backups': {
-      const [backups, allDbStats, junkCount, notifsCount, sheetRowsCount] = await Promise.all([
+      const [backups, allDbStats, junkCount, notifsCount, sheetRowsCount, driveConfig] = await Promise.all([
         listBackups(),
         getAllDatabasesStorageStats(),
         getJunkLeadsCount(user),
         Notification.countDocuments(),
         SheetRow.countDocuments(),
+        Promise.resolve(getGoogleDriveConfigStatus()),
       ])
       return (
         <div className="space-y-6">
           <DbStorageCard stats={allDbStats} isAdmin={admin} />
+          <GoogleDriveBackupCard config={driveConfig} />
           <CrmCleanupCard
             junkLeadsCount={junkCount}
             notificationsCount={notifsCount}

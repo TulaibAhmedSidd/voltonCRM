@@ -1426,6 +1426,7 @@ export async function restoreBackupAction(_prev: ActionState, fd: FormData): Pro
 }
 
 export async function wipeDevDatabaseAction(_prev?: ActionState, _fd?: FormData): Promise<ActionState> {
+  void _prev; void _fd;
   const actor = await requireRole('admin')
   return attempt(async () => {
     const res = await wipeDevDatabase(actor)
@@ -1435,6 +1436,7 @@ export async function wipeDevDatabaseAction(_prev?: ActionState, _fd?: FormData)
 }
 
 export async function wipeBackupDatabaseAction(_prev?: ActionState, _fd?: FormData): Promise<ActionState> {
+  void _prev; void _fd;
   const actor = await requireRole('admin')
   return attempt(async () => {
     const res = await wipeBackupDatabase(actor)
@@ -1502,6 +1504,26 @@ export async function markQuotationSentAction(_prev: ActionState, fd: FormData):
     await markQuotationSent(actor, leadId, quotationId)
     refresh()
     return { ok: true, message: 'Quotation status saved as Sent to customer ✓' }
+  })
+}
+
+export async function backupLeadsToGoogleDriveAction(): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const { backupLeadsToGoogleDrive } = await import('@/server/services/google-drive-backup')
+    const res = await backupLeadsToGoogleDrive(actor)
+    refresh()
+    return { ok: res.ok, message: res.message }
+  })
+}
+
+export async function backupDatabaseToGoogleDriveAction(): Promise<ActionState> {
+  const actor = await requireRole('admin', 'manager')
+  return attempt(async () => {
+    const { backupDatabaseToGoogleDrive } = await import('@/server/services/google-drive-backup')
+    const res = await backupDatabaseToGoogleDrive(actor)
+    refresh()
+    return { ok: res.ok, message: res.message }
   })
 }
 

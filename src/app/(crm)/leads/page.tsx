@@ -30,6 +30,7 @@ import { SectionBack, SectionHub } from '@/components/common/section-hub'
 import { EmployeeLeadList, EmployeeLeadNumbers, LeadProgressBar } from '@/components/crm/employee-lead-list'
 import { Types } from 'mongoose'
 import { LeadFilterPanel } from '@/components/crm/lead-filter-panel'
+import { LeadsStateTracker } from '@/components/crm/leads-state-tracker'
 import { ExportLeads } from '@/components/crm/export-leads'
 import { LeadSourcesPanel } from '@/components/crm/lead-sources-panel'
 import { AutoRefresh } from '@/components/common/auto-refresh'
@@ -318,6 +319,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         </div>
       ) : null}
       {one('notice') === 'erased' ? <p role="status" className="rounded-lg bg-tone-success-soft px-3 py-2 text-sm text-tone-success-soft-foreground">The customer&apos;s data was erased permanently.</p> : null}
+      <Suspense fallback={null}><LeadsStateTracker /></Suspense>
       {sources.length && !person ? <LeadSourcesPanel sources={sources} /> : <AutoRefresh />}
       <Suspense>
         <SearchBox />
@@ -351,7 +353,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
               <div key={l.id} className="flex items-start gap-2">
                 {canDelete ? <LeadSelectBox leadId={l.id} label={`${l.name} ${l.leadNo}`} /> : null}
                 <div className="min-w-0 flex-1 space-y-2">
-                  <LeadCard lead={l} href={`/leads/${l.id}`} showAgent={user.role !== 'agent'} />
+                  <LeadCard lead={l} href={`/leads/${l.id}?returnTo=${encodeURIComponent(currentSearchPath)}`} showAgent={user.role !== 'agent'} />
                   {canAssign && l.status === 'open' && !l.agent ? (
                     <AssignLeadDialog
                       leadId={l.id}

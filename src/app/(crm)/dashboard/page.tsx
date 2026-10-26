@@ -118,7 +118,7 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
             <div className="space-y-3">
               {toAccept.map((lead) => (
                 <div key={lead.id} className="space-y-2">
-                  <LeadCard lead={lead} href={`/leads/${lead.id}`} showAgent={false} />
+                  <LeadCard lead={lead} href={`/leads/${lead.id}?returnTo=${encodeURIComponent('/dashboard')}`} showAgent={false} />
                   <form action={acceptLeadAction}>
                     <input type="hidden" name="leadId" value={lead.id} />
                     <SubmitButton size="xl" className="w-full" pendingText="Accepting…">Accept {lead.leadNo}</SubmitButton>
@@ -129,7 +129,7 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
           )}
         </SectionCard>
         <SectionCard title={`Follow-ups due (${dueToday.length})`} actions={<Button asChild variant="outline" size="touch"><Link href="/follow-ups">All</Link></Button>}>
-          {dueToday.length === 0 ? <EmptyState title="Nothing due" /> : dueToday.slice(0, 10).map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}`} />)}
+          {dueToday.length === 0 ? <EmptyState title="Nothing due" /> : dueToday.slice(0, 10).map((f) => <FollowUpItem key={f.id} followUp={f} href={`/leads/${f.leadId}?returnTo=${encodeURIComponent('/dashboard')}`} />)}
         </SectionCard>
         <KpiGrid items={kpis.slice(0, 8)} />
         
@@ -167,7 +167,7 @@ export default async function DashboardPage(props: PageProps<'/dashboard'>) {
         </SectionCard>
         <SectionCard title={`Waiting for assignment (${queue.total})`} actions={<Button asChild variant="outline" size="touch"><Link href="/leads?view=unassigned">Open</Link></Button>}>
           <QueuePanel teams={queuePanels} />
-          {queue.rows.length === 0 ? null : <div className="mt-3 space-y-2">{queue.rows.slice(0, 5).map((l) => <LeadCard key={l.id} lead={l} href={`/leads/${l.id}`} />)}</div>}
+          {queue.rows.length === 0 ? null : <div className="mt-3 space-y-2">{queue.rows.slice(0, 5).map((l) => <LeadCard key={l.id} lead={l} href={`/leads/${l.id}?returnTo=${encodeURIComponent('/dashboard')}`} />)}</div>}
         </SectionCard>
       </div>
       <KpiGrid items={kpis} />

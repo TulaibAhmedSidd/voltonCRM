@@ -7,6 +7,7 @@ import { ActionForm } from '@/components/common/action-form'
 import { SubmitButton } from '@/components/common/submit-button'
 import { CheckboxField, SelectField, TextAreaField, TextField } from '@/components/common/fields'
 import { PageHeader } from '@/components/common/page-header'
+import type { BreadcrumbItem } from '@/components/common/breadcrumbs'
 import { SectionCard } from '@/components/common/section-card'
 import { EmptyState } from '@/components/common/states'
 import { StatusBadge } from '@/components/common/status-badge'
@@ -79,11 +80,60 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   ].filter(Boolean)
 
   const isLocked = user.role === 'agent' && (await isLeadLockedForAgent(user.id, { _id: lead.id, status: lead.status, unlockedForAgent: lead.unlockedForAgent, assignment: { state: lead.assignmentState } }))
-  const backHref = typeof sp.returnTo === 'string' && sp.returnTo.startsWith('/leads') ? sp.returnTo : '/leads'
+
+  const allowedPrefixes = ['/leads', '/junk-leads', '/pipeline', '/dashboard', '/follow-ups', '/quotations', '/review']
+  const returnTo = typeof sp.returnTo === 'string' && allowedPrefixes.some((p) => (sp.returnTo as string).startsWith(p))
+    ? (sp.returnTo as string)
+    : undefined
+
+  // Default fallback must NEVER be bare '/leads' for managers because bare '/leads' opens the selection cards!
+  const fallbackHref = returnTo ?? (user.role === 'agent' ? '/leads?view=mine' : '/leads?view=all')
+
+  const breadcrumbs: BreadcrumbItem[] = []
+  if (returnTo?.startsWith('/junk-leads')) {
+    breadcrumbs.push({ label: 'Junk Leads', href: '/junk-leads' })
+  } else if (returnTo?.startsWith('/pipeline')) {
+    breadcrumbs.push({ label: 'Pipeline', href: '/pipeline' })
+  } else if (returnTo?.startsWith('/quotations')) {
+    breadcrumbs.push({ label: 'Quotations', href: '/quotations' })
+  } else if (returnTo?.startsWith('/follow-ups')) {
+    breadcrumbs.push({ label: 'Follow-ups', href: '/follow-ups' })
+  } else if (returnTo?.includes('show=people')) {
+    breadcrumbs.push({ label: 'Leads', href: '/leads?view=all' })
+    breadcrumbs.push({ label: 'Leads by Employee', href: '/leads?show=people' })
+    if (lead.agent) {
+      breadcrumbs.push({ label: lead.agent.name, href: `/leads?show=people&person=${lead.agent.id}` })
+    }
+  } else if (returnTo?.includes('person=')) {
+    breadcrumbs.push({ label: 'Leads', href: '/leads?view=all' })
+    if (lead.agent) {
+      breadcrumbs.push({ label: lead.agent.name, href: returnTo })
+    }
+  } else {
+    breadcrumbs.push({ label: 'Leads', href: '/leads?view=all' })
+    if (returnTo?.includes('view=mine')) {
+      breadcrumbs.push({ label: 'My Leads', href: returnTo })
+    } else if (returnTo?.includes('view=new')) {
+      breadcrumbs.push({ label: 'New Leads', href: returnTo })
+    } else if (returnTo?.includes('view=unassigned')) {
+      breadcrumbs.push({ label: 'Unassigned Leads', href: returnTo })
+    } else if (returnTo?.includes('view=followups')) {
+      breadcrumbs.push({ label: 'Follow-ups', href: returnTo })
+    } else if (returnTo?.includes('view=junk')) {
+      breadcrumbs.push({ label: 'Junk Leads', href: returnTo })
+    } else {
+      breadcrumbs.push({ label: 'All Leads', href: returnTo ?? '/leads?view=all' })
+    }
+  }
+  breadcrumbs.push({ label: `${lead.name} (${lead.leadNo})`, current: true })
 
   return (
     <>
-      <PageHeader title={lead.name} backHref={backHref} />
+      <PageHeader
+        title={lead.name}
+        backHref={fallbackHref}
+        breadcrumbs={breadcrumbs}
+      />
       {isLocked && (
         <div className="rounded-xl border border-tone-warning/40 bg-tone-warning-soft p-4 text-tone-warning-soft-foreground">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -51,7 +51,7 @@ export default async function JunkLeadsPage(props: { searchParams: Promise<Recor
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <Link
-              href={`/leads/${l.id}`}
+              href={`/leads/${l.id}?returnTo=${encodeURIComponent(href({}))}`}
               className="font-medium underline-offset-4 hover:underline"
             >
               {l.name}

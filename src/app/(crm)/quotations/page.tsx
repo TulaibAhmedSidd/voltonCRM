@@ -175,7 +175,7 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
                           <td className="whitespace-nowrap px-4 py-3">
                             {row.leadId ? (
                               <Link
-                                href={`/leads/${row.leadId}`}
+                                href={`/leads/${row.leadId}?returnTo=${encodeURIComponent('/quotations')}`}
                                 className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs font-medium hover:bg-muted/80"
                               >
                                 {row.leadNo ?? 'Lead'}

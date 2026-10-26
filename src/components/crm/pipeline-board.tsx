@@ -166,7 +166,7 @@ export function PipelineBoard({ stages, leads }: PipelineBoardProps) {
               </header>
               <div className="space-y-2">
                 {cards.slice(0, 30).map((l) => (
-                  <LeadCard key={l.id} lead={l} href={`/leads/${l.id}`} />
+                  <LeadCard key={l.id} lead={l} href={`/leads/${l.id}?returnTo=${encodeURIComponent('/pipeline')}`} />
                 ))}
               </div>
               {cards.length > 30 ? (
