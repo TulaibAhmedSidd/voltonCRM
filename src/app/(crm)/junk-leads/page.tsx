@@ -9,6 +9,7 @@ import { LeadSelectBox } from '@/components/crm/lead-bulk-actions'
 import { SourceBadge } from '@/components/crm/badges'
 import { ActionForm } from '@/components/common/action-form'
 import { deleteLeadsAction, purgeAllJunkLeadsAction, revertJunkAction } from '@/server/actions'
+import { JunkLeadDetailModal } from '@/components/crm/junk-lead-detail-modal'
 import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone, maskPhone } from '@/lib/phone'
@@ -50,12 +51,7 @@ export default async function JunkLeadsPage(props: { searchParams: Promise<Recor
       cell: (l) => (
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            <Link
-              href={`/leads/${l.id}?returnTo=${encodeURIComponent(href({}))}`}
-              className="font-medium underline-offset-4 hover:underline"
-            >
-              {l.name}
-            </Link>
+            <JunkLeadDetailModal lead={l} canManage={canManage} />
             <SourceBadge channel={l.channel} detail={l.sourceDetail} platform={l.platform} isAd={l.isAd} size="sm" />
           </div>
           <span className="block text-xs text-muted-foreground">
@@ -75,17 +71,20 @@ export default async function JunkLeadsPage(props: { searchParams: Promise<Recor
       key: 'junkedBy',
       header: 'Junked By & Reason',
       cell: (l) => (
-        <div className="space-y-0.5 text-xs">
-          <span className="font-semibold text-foreground">
+        <div className="space-y-0.5 text-xs max-w-[180px] sm:max-w-[220px]">
+          <span className="font-semibold text-foreground block truncate">
             {l.junkedBy?.name ?? 'CRM User'}
           </span>
           {l.junkedBy?.reason ? (
-            <span className="block max-w-[220px] text-tone-danger-soft-foreground font-medium" title={l.junkedBy.reason}>
+            <span
+              className="block truncate font-medium text-tone-danger-soft-foreground"
+              title={l.junkedBy.reason}
+            >
               {l.junkedBy.reason}
             </span>
           ) : null}
           {l.junkedBy?.at ? (
-            <span className="block text-muted-foreground">
+            <span className="block text-muted-foreground truncate">
               {formatPktDateTime(new Date(l.junkedBy.at))}
             </span>
           ) : null}

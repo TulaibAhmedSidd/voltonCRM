@@ -5,6 +5,7 @@ import { SectionCard } from '@/components/common/section-card'
 import { EmptyState } from '@/components/common/states'
 import { Button } from '@/components/ui/button'
 import { NewQuotationDialog } from '@/components/crm/new-quotation-dialog'
+import { websiteCatalog } from '@/server/services/website'
 import { QuotationStatusSelect } from '@/components/crm/quotation-status-select'
 import { requireUser } from '@/server/auth/session'
 import { listCentralQuotations } from '@/server/services/quotations'
@@ -26,9 +27,10 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
     : undefined
   const page = typeof sp.page === 'string' ? Math.max(1, parseInt(sp.page, 10) || 1) : 1
 
-  const [{ rows, total }, openLeadsRes] = await Promise.all([
+  const [{ rows, total }, openLeadsRes, catalog] = await Promise.all([
     listCentralQuotations(user, { q, status, page }),
     listLeads(user, { view: user.role === 'agent' ? 'mine' : 'all' }),
+    websiteCatalog(),
   ])
 
   const leadOptions = openLeadsRes.rows.map((l) => ({
@@ -71,7 +73,7 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
           description="Create, preview, and track customer quotations with live pricing and WhatsApp sharing."
         />
         <div className="shrink-0">
-          <NewQuotationDialog leadsList={leadOptions} />
+          <NewQuotationDialog leadsList={leadOptions} catalog={catalog} />
         </div>
       </div>
 

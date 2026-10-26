@@ -113,26 +113,62 @@ function PdfButtons({ id, no, total, customer, onShare }: { id: string; no: stri
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Karachi' })
 
 /** Lead page → Quotation tab: fill the quotation, see the total live, generate a numbered PDF to send to the customer. */
-/** Website product list (voltonsolar.com admin): picking one fills the model and price (and watt for panels). */
-function ProductPick({ items, onPick }: { items: CatalogItem[]; onPick: (item: CatalogItem) => void }) {
-  if (!items.length) return null
+/** Website product list (voltonsolar.com) + Standard catalog models: picking one auto-fills the model and price. */
+function ProductSelector({
+  title,
+  items,
+  suggestions,
+  onPick,
+}: {
+  title: string
+  items: CatalogItem[]
+  suggestions: readonly string[]
+  onPick: (product: { label: string; price?: number; watt?: number }) => void
+}) {
+  const allOptions = useMemo(() => {
+    const list: { id: string; label: string; price?: number; watt?: number; isWebsite?: boolean }[] = []
+    for (const item of items) {
+      list.push({ id: item.id, label: item.label, price: item.price, watt: item.watt, isWebsite: true })
+    }
+    for (const s of suggestions) {
+      if (!list.some((i) => i.label.toLowerCase() === s.toLowerCase())) {
+        list.push({ id: s, label: s, isWebsite: false })
+      }
+    }
+    return list
+  }, [items, suggestions])
+
   return (
-    <Field label={`Pick from website products (${items.length})`} className="sm:col-span-4" hint="Same products and prices as voltonsolar.com — you can still change the price below.">
+    <Field
+      label={`Select ${title} from Catalog / Website (${allOptions.length})`}
+      className="sm:col-span-4"
+      hint="Choose a product to auto-fill details, or edit and type your own custom model in the Brand / model field below."
+    >
       <select
         value=""
         onChange={(e) => {
-          const item = items.find((i) => i.id === e.target.value)
-          if (item) onPick(item)
+          const found = allOptions.find((i) => i.id === e.target.value)
+          if (found) onPick(found)
         }}
         className={control}
       >
-        <option value="">Choose a product…</option>
-        {items.map((i) => (
-          <option key={i.id} value={i.id}>
-            {i.label}
-            {i.price ? ` — Rs ${formatRs(i.price)}` : ''}
-          </option>
-        ))}
+        <option value="">-- Choose ${title} from dropdown (or type custom below) --</option>
+        {items.length > 0 && (
+          <optgroup label="Website Products (voltonsolar.com)">
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.label} {i.price ? `— Rs ${formatRs(i.price)}` : ''}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        <optgroup label="Standard Volt On Models">
+          {suggestions.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </optgroup>
       </select>
     </Field>
   )
@@ -359,7 +395,7 @@ export function QuotationBuilder({
 
           <Section n={2} title="Solar panels">
             <div className="grid gap-3 sm:grid-cols-4">
-              <ProductPick items={site.panels} onPick={(p) => setQ((prev) => ({ ...prev, panelModel: p.label, panelPrice: p.price || prev.panelPrice, panelWatt: p.watt ?? prev.panelWatt }))} />
+              <ProductSelector title="Solar Panel" items={site.panels} suggestions={PANEL_SUGGESTIONS} onPick={(p) => setQ((prev) => ({ ...prev, panelModel: p.label, panelPrice: p.price ?? prev.panelPrice, panelWatt: p.watt ?? prev.panelWatt }))} />
               <Field label="Brand / model" className="sm:col-span-2">
                 <input {...txt('panelModel', 'q-panels')} placeholder="e.g. LONGi Hi-MO X10 645W" />
               </Field>
@@ -377,7 +413,7 @@ export function QuotationBuilder({
 
           <Section n={3} title="Inverter">
             <div className="grid gap-3 sm:grid-cols-4">
-              <ProductPick items={site.inverters} onPick={(p) => setQ((prev) => ({ ...prev, inverterModel: p.label, inverterPrice: p.price || prev.inverterPrice, inverterQty: prev.inverterQty || 1 }))} />
+              <ProductSelector title="Inverter" items={site.inverters} suggestions={INVERTER_SUGGESTIONS} onPick={(p) => setQ((prev) => ({ ...prev, inverterModel: p.label, inverterPrice: p.price ?? prev.inverterPrice, inverterQty: prev.inverterQty || 1 }))} />
               <Field label="Brand / model" className="sm:col-span-2">
                 <input {...txt('inverterModel', 'q-inverters')} placeholder="e.g. GoodWe 12kW SP" />
               </Field>
@@ -392,7 +428,7 @@ export function QuotationBuilder({
 
           <Section n={4} title="Battery (leave quantity 0 for no battery)">
             <div className="grid gap-3 sm:grid-cols-4">
-              <ProductPick items={site.batteries} onPick={(p) => setQ((prev) => ({ ...prev, batteryModel: p.label, batteryPrice: p.price || prev.batteryPrice, batteryQty: prev.batteryQty || 1 }))} />
+              <ProductSelector title="Battery" items={site.batteries} suggestions={BATTERY_SUGGESTIONS} onPick={(p) => setQ((prev) => ({ ...prev, batteryModel: p.label, batteryPrice: p.price ?? prev.batteryPrice, batteryQty: prev.batteryQty || 1 }))} />
               <Field label="Brand / model" className="sm:col-span-2">
                 <input {...txt('batteryModel', 'q-batteries')} placeholder="e.g. Itel 51.2V 100Ah LiFePO4" />
               </Field>

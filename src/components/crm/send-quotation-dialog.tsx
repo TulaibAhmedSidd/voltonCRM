@@ -15,6 +15,7 @@ import { QuotationBuilder } from '@/components/crm/quotation-builder'
 import { defaultQuotation } from '@/domain/quotation'
 import { ActionForm } from '@/components/common/action-form'
 import { markQuotationSentAction } from '@/server/actions'
+import type { WebsiteCatalog } from '@/domain/website'
 
 export function SendQuotationDialog({
   leadId,
@@ -22,15 +23,17 @@ export function SendQuotationDialog({
   customerName,
   customerPhone,
   quotationSent,
+  catalog,
 }: {
   leadId: string
   leadNo: string
   customerName: string
   customerPhone: string
   quotationSent?: boolean
+  catalog?: WebsiteCatalog
 }) {
   const [open, setOpen] = useState(false)
-    const initial = defaultQuotation()
+  const initial = defaultQuotation()
 
   if (quotationSent) {
     return (
@@ -56,7 +59,7 @@ export function SendQuotationDialog({
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="max-h-[92dvh] w-full max-w-4xl overflow-y-auto p-4 md:p-6">
+      <DialogContent className="max-h-[92dvh] w-[95vw] sm:max-w-4xl lg:max-w-5xl overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Send Quotation — {customerName}</DialogTitle>
           <DialogDescription>
@@ -66,7 +69,7 @@ export function SendQuotationDialog({
 
         {/* Confirmation banner after sharing */}
         <div className="rounded-xl border border-border bg-muted/30 p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-0.5">
               <span className="text-sm font-semibold">Have you sent the quotation to the customer?</span>
               <p className="text-xs text-muted-foreground">
@@ -78,7 +81,7 @@ export function SendQuotationDialog({
               onSuccess={() => setOpen(false)}
             >
               <input type="hidden" name="leadId" value={leadId} />
-              <Button type="submit" size="touch" className="gap-1.5">
+              <Button type="submit" size="touch" className="gap-1.5 shrink-0 whitespace-nowrap">
                 <CheckCircle2 className="size-4" aria-hidden />
                 <span>Yes, Save Quotation Sent</span>
               </Button>
@@ -92,6 +95,7 @@ export function SendQuotationDialog({
             initial={initial}
             quotations={[]}
             canCreate={true}
+            catalog={catalog}
             customer={{ name: customerName, phone: customerPhone }}
           />
         </div>

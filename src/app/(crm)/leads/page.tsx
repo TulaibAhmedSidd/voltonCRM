@@ -23,6 +23,7 @@ import { requireUser } from '@/server/auth/session'
 import { ArrowLeft, List, Lock, RotateCcw, Users } from 'lucide-react'
 import { FollowUpButtonModal } from '@/components/crm/follow-up-modal'
 import { SendQuotationDialog } from '@/components/crm/send-quotation-dialog'
+import { websiteCatalog } from '@/server/services/website'
 import { LEAD_VIEWS, PAGE_SIZE, employeeLeadStats, getAssignableAgents, getQueuePanels, leadFilterOptions, listLeads, type LeadView } from '@/server/services/queries'
 import { en } from '@/i18n/en'
 import { DATE_PRESET_LABEL, activeFilterCount, parseLeadFilters, receivedRange, type DatePreset } from '@/domain/lead-filters'
@@ -74,10 +75,11 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
   const canDelete = user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin'
   const canAssign = canDelete
   const canExport = canDelete || user.role === 'marketing'
-  const [{ rows, total, counts }, filterOptions, assignableAgents] = await Promise.all([
+  const [{ rows, total, counts }, filterOptions, assignableAgents, catalog] = await Promise.all([
     listLeads(user, { view, q: one('q'), page, sort: one('sort'), dir: one('dir') === 'asc' ? 'asc' : 'desc', filters, personId }),
     leadFilterOptions(user),
     canAssign ? getAssignableAgents(user) : Promise.resolve([]),
+    websiteCatalog(),
   ])
   const sources = user.role === 'agent' || personId ? [] : await leadSourcesStatus(user)
   const views = LEAD_VIEWS.filter((v) => !(v === 'mine' && user.role !== 'agent') && !(v === 'unassigned' && (user.role === 'agent' || personId)))
@@ -280,6 +282,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           customerName={l.name}
           customerPhone={l.phone}
           quotationSent={l.quotationSent}
+          catalog={catalog}
         />
       ),
     },

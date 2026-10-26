@@ -12,8 +12,15 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { QuotationBuilder, type QuotationLeadOption } from '@/components/crm/quotation-builder'
+import type { WebsiteCatalog } from '@/domain/website'
 
-export function NewQuotationDialog({ leadsList = [] }: { leadsList?: QuotationLeadOption[] }) {
+export function NewQuotationDialog({
+  leadsList = [],
+  catalog,
+}: {
+  leadsList?: QuotationLeadOption[]
+  catalog?: WebsiteCatalog
+}) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -25,7 +32,7 @@ export function NewQuotationDialog({ leadsList = [] }: { leadsList?: QuotationLe
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="max-h-[92dvh] w-full max-w-4xl overflow-y-auto p-4 md:p-6">
+      <DialogContent className="max-h-[92dvh] w-[95vw] sm:max-w-4xl lg:max-w-5xl overflow-y-auto p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Quotation Builder</DialogTitle>
           <DialogDescription>
@@ -39,6 +46,7 @@ export function NewQuotationDialog({ leadsList = [] }: { leadsList?: QuotationLe
             leadsList={leadsList}
             quotations={[]}
             canCreate={true}
+            catalog={catalog}
           />
         </div>
       </DialogContent>
