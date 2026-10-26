@@ -42,7 +42,7 @@ interface LeadLike {
   receivedAt: Date
   unlockedForAgent?: boolean
   unlockRequested?: boolean
-  junkedBy?: { id?: unknown; name?: string | null; at?: Date | null } | null
+  junkedBy?: { id?: unknown; name?: string | null; at?: Date | null; reason?: string | null } | null
   quotationSent?: boolean
   quotationSentAt?: Date | null
 }
@@ -144,6 +144,9 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
       maps.earliestActiveLeadId !== String(l._id),
     unlockRequested: !!l.unlockRequested,
     unlockedForAgent: !!l.unlockedForAgent,
+    junkedBy: l.junkedBy?.name ? { id: String(l.junkedBy.id ?? ''), name: l.junkedBy.name, at: iso(l.junkedBy.at) ?? '', reason: l.junkedBy.reason ?? undefined } : undefined,
+    quotationSent: !!l.quotationSent,
+    quotationSentAt: iso(l.quotationSentAt),
   }
 }
 

@@ -66,6 +66,9 @@ function describe(type: string, d: Record<string, unknown>, actor?: string): str
     return `Moved to stage: ${stageName}${lostReason}`
   }
   if (type === 'status_changed') {
+    if (d.status === 'junk') {
+      return `Marked as Junk: ${d.reason || 'No reason specified'}${d.junkedBy ? ` · By ${d.junkedBy}` : ''}`
+    }
     const parts: string[] = []
     if (d.status) parts.push(`Status: ${d.status}`)
     if (d.reason) parts.push(`Reason: ${d.reason}`)

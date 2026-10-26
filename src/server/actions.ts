@@ -1476,9 +1476,11 @@ export async function moveToJunkAction(_prev: ActionState, fd: FormData): Promis
   const actor = await requireRole('admin', 'manager', 'agent')
   return attempt(async () => {
     const leadId = str(fd, 'leadId')
-    const reason = str(fd, 'reason') ?? 'Moved to junk by user'
+    const category = str(fd, 'reasonCategory') ?? str(fd, 'reason') ?? 'Marked as junk'
+    const notes = str(fd, 'reasonNotes')?.trim()
+    const fullReason = notes ? `${category}: ${notes}` : category
     if (!leadId) return { ok: false, message: 'Lead not specified' }
-    await moveToJunk(actor, leadId, reason)
+    await moveToJunk(actor, leadId, fullReason)
     refresh()
     return { ok: true, message: 'Lead moved to Junk successfully' }
   })

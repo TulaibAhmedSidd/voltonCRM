@@ -236,10 +236,15 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
       ? [
           {
             key: 'junkedBy',
-            header: 'Junked By',
+            header: 'Junked By & Reason',
             cell: (l: LeadSummary) => (
-              <div className="text-xs">
+              <div className="space-y-0.5 text-xs">
                 <span className="font-medium text-foreground">{l.junkedBy?.name ?? 'CRM User'}</span>
+                {l.junkedBy?.reason ? (
+                  <span className="block max-w-[200px] text-tone-danger-soft-foreground font-medium" title={l.junkedBy.reason}>
+                    {l.junkedBy.reason}
+                  </span>
+                ) : null}
                 {l.junkedBy?.at ? (
                   <span className="block text-muted-foreground">{formatPktDateTime(new Date(l.junkedBy.at))}</span>
                 ) : null}

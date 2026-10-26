@@ -258,6 +258,7 @@ export async function moveToJunk(user: SessionUser, leadId: string, reason: stri
       id: oid(user.id),
       name: user.name,
       at: now,
+      reason: reason.slice(0, 300),
     },
     updatedBy: oid(user.id),
   })

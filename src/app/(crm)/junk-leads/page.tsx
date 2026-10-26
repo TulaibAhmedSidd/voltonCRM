@@ -73,12 +73,17 @@ export default async function JunkLeadsPage(props: { searchParams: Promise<Recor
     },
     {
       key: 'junkedBy',
-      header: 'Junked By',
+      header: 'Junked By & Reason',
       cell: (l) => (
         <div className="space-y-0.5 text-xs">
           <span className="font-semibold text-foreground">
             {l.junkedBy?.name ?? 'CRM User'}
           </span>
+          {l.junkedBy?.reason ? (
+            <span className="block max-w-[220px] text-tone-danger-soft-foreground font-medium" title={l.junkedBy.reason}>
+              {l.junkedBy.reason}
+            </span>
+          ) : null}
           {l.junkedBy?.at ? (
             <span className="block text-muted-foreground">
               {formatPktDateTime(new Date(l.junkedBy.at))}

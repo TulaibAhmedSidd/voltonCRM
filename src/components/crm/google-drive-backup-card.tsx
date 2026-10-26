@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { CheckCircle2, ChevronDown, ChevronUp, Cloud, Database, FileSpreadsheet, Info, Key, ShieldCheck } from 'lucide-react'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Cloud, Database, FileSpreadsheet, Info, Key, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
 import { SubmitButton } from '@/components/common/submit-button'
@@ -9,7 +10,18 @@ import { backupDatabaseToGoogleDriveAction, backupLeadsToGoogleDriveAction } fro
 import type { GoogleDriveConfigStatus } from '@/server/services/google-drive-backup'
 
 export function GoogleDriveBackupCard({ config }: { config: GoogleDriveConfigStatus }) {
-  const [showGuide, setShowGuide] = useState(!config.isConfigured)
+  return (
+    <Suspense fallback={<div className="h-40 rounded-2xl border border-border bg-card p-5 animate-pulse" />}>
+      <GoogleDriveBackupCardInner config={config} />
+    </Suspense>
+  )
+}
+
+function GoogleDriveBackupCardInner({ config }: { config: GoogleDriveConfigStatus }) {
+  const [showGuide, setShowGuide] = useState(!config.isConfigured && !config.isOAuthConnected)
+  const searchParams = useSearchParams()
+  const justConnected = searchParams.get('google_drive_connected') === 'true'
+  const oauthError = searchParams.get('oauth_error')
 
   return (
     <div className="space-y-4 rounded-2xl border border-border bg-card p-5 text-card-foreground shadow-sm">
@@ -25,10 +37,20 @@ export function GoogleDriveBackupCard({ config }: { config: GoogleDriveConfigSta
         </div>
 
         <div className="flex items-center gap-2">
-          {config.isConfigured ? (
+          {config.isOAuthConnected ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-tone-success-soft px-3 py-1 text-xs font-semibold text-tone-success-soft-foreground">
               <CheckCircle2 className="size-3.5" aria-hidden />
-              <span>Drive Ready</span>
+              <span>OAuth 2.0 Connected (15 GB Quota)</span>
+            </span>
+          ) : config.isConfigured ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-tone-info-soft px-3 py-1 text-xs font-semibold text-tone-info-soft-foreground">
+              <CheckCircle2 className="size-3.5" aria-hidden />
+              <span>Service Account Configured</span>
+            </span>
+          ) : config.hasOAuth ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-tone-warning-soft px-3 py-1 text-xs font-semibold text-tone-warning-soft-foreground">
+              <Key className="size-3.5" aria-hidden />
+              <span>Authorization Required</span>
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-tone-warning-soft px-3 py-1 text-xs font-semibold text-tone-warning-soft-foreground">
@@ -39,20 +61,51 @@ export function GoogleDriveBackupCard({ config }: { config: GoogleDriveConfigSta
         </div>
       </div>
 
+      {justConnected && (
+        <div className="flex items-center gap-2 rounded-xl bg-tone-success-soft p-3 text-xs text-tone-success-soft-foreground">
+          <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+          <span>Google Drive account (<strong>{config.targetEmail}</strong>) has been connected successfully via OAuth 2.0! Backups will now use your personal 15 GB quota.</span>
+        </div>
+      )}
+
+      {oauthError && (
+        <div className="flex items-center gap-2 rounded-xl bg-tone-danger-soft p-3 text-xs text-tone-danger-soft-foreground">
+          <AlertCircle className="size-4 shrink-0" aria-hidden />
+          <span>Google OAuth authorization encountered an issue: <code>{oauthError}</code>. Please retry connecting.</span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 pt-1">
+        {config.hasOAuth && !config.isOAuthConnected && (
+          <Button asChild size="touch" className="gap-2">
+            <a href="/api/auth/google/drive">
+              <Key className="size-4" aria-hidden />
+              <span>1-Click Connect Google Drive ({config.targetEmail})</span>
+            </a>
+          </Button>
+        )}
+
         <ActionForm action={backupLeadsToGoogleDriveAction}>
-          <SubmitButton size="touch" className="gap-2">
+          <SubmitButton size="touch" className="gap-2" disabled={!config.isConfigured && !config.isOAuthConnected}>
             <FileSpreadsheet className="size-4" aria-hidden />
             <span>Backup All Leads to Google Drive</span>
           </SubmitButton>
         </ActionForm>
 
         <ActionForm action={backupDatabaseToGoogleDriveAction}>
-          <SubmitButton size="touch" variant="outline" className="gap-2">
+          <SubmitButton size="touch" variant="outline" className="gap-2" disabled={!config.isConfigured && !config.isOAuthConnected}>
             <Database className="size-4" aria-hidden />
             <span>Backup Full Database to Google Drive</span>
           </SubmitButton>
         </ActionForm>
+
+        {config.isOAuthConnected && (
+          <Button asChild variant="ghost" size="touch" className="text-xs text-muted-foreground">
+            <a href="/api/auth/google/drive">
+              <span>Reconnect Google Account</span>
+            </a>
+          </Button>
+        )}
 
         <Button
           type="button"
@@ -74,41 +127,35 @@ export function GoogleDriveBackupCard({ config }: { config: GoogleDriveConfigSta
           </div>
 
           <p>
-            Google requires a free <strong>Google Cloud Service Account</strong> to allow automated background uploads directly into your Drive folder:
+            You can connect Google Drive via <strong>OAuth 2.0 (Recommended)</strong> to utilize your personal 15 GB quota directly:
           </p>
 
           <ol className="list-decimal space-y-2.5 ps-4 text-foreground/90">
             <li>
-              <strong>Create a Google Cloud Project:</strong> Go to{' '}
-              <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="text-primary underline">
-                Google Cloud Console
-              </a>
-              , create a new free project, and enable the <strong>Google Drive API</strong>.
-            </li>
-            <li>
-              <strong>Create a Service Account:</strong> In <em>APIs & Services → Credentials</em>, click <strong>Create Credentials → Service Account</strong> (e.g. <code>volton-backup-agent</code>). Under Keys, click <strong>Add Key → Create new key (JSON)</strong>.
-            </li>
-            <li>
-              <strong>Share a Drive Folder:</strong> Open your Google Drive at <strong>{config.targetEmail}</strong>, create a folder (e.g. <code>VoltOn CRM Backups</code>), and share this folder with the <em>Service Account email address</em> (granting Editor permission). Copy the folder ID from the URL.
+              <strong>Create OAuth Client ID:</strong> In Google Cloud Console under <em>APIs & Services → Credentials</em>, create an OAuth Client ID for <strong>Web application</strong>. Add redirect URI <code>http://localhost:3000/api/auth/google/drive/callback</code> (and your live Vercel URL).
             </li>
             <li>
               <strong>Add credentials to <code>.env</code>:</strong>
               <pre className="mt-2 overflow-x-auto rounded-lg bg-card p-3 font-mono text-xs text-foreground ring-1 ring-border">
 {`# Google Drive Backup Configuration for ${config.targetEmail}
 GOOGLE_DRIVE_BACKUP_EMAIL="${config.targetEmail}"
-GOOGLE_SERVICE_ACCOUNT_EMAIL="your-service-account@project.iam.gserviceaccount.com"
-GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nYour_Key_Here\\n-----END PRIVATE KEY-----"
-GOOGLE_DRIVE_FOLDER_ID="your_google_drive_folder_id_here"`}
+GOOGLE_CLIENT_ID="your_client_id_here"
+GOOGLE_CLIENT_SECRET="your_client_secret_here"
+GOOGLE_DRIVE_FOLDER_ID="${config.folderId ?? 'your_drive_folder_id'}"`}
               </pre>
+            </li>
+            <li>
+              <strong>Click the Connect Button:</strong> Click the <strong>1-Click Connect Google Drive</strong> button above, sign into <strong>{config.targetEmail}</strong>, and grant permission. The CRM will automatically receive the permanent refresh token and handle all future backups!
             </li>
           </ol>
 
           <div className="flex items-center gap-2 rounded-lg bg-tone-info-soft p-2.5 text-tone-info-soft-foreground">
             <Info className="size-4 shrink-0" aria-hidden />
-            <span>Once these 3 keys are in your <code>.env</code> file, clicking either backup button above will instantly upload directly into your Google Drive!</span>
+            <span>Once connected, backups are uploaded straight into your Google Drive folder using your personal 15 GB storage quota!</span>
           </div>
         </div>
       )}
     </div>
   )
 }
+

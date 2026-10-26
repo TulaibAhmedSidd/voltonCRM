@@ -65,14 +65,14 @@ export function MoveToJunkButton({
           <input type="hidden" name="leadId" value={leadId} />
 
           <div className="space-y-1.5">
-            <label htmlFor={`junk-reason-${leadId}`} className="block text-sm font-medium">
-              Reason / Category
+            <label htmlFor={`junk-category-${leadId}`} className="block text-sm font-medium">
+              Reason / Category <span className="text-tone-danger-soft-foreground">*</span>
             </label>
             <select
-              id={`junk-reason-${leadId}`}
-              name="reason"
+              id={`junk-category-${leadId}`}
+              name="reasonCategory"
               defaultValue="Invalid phone / Wrong number"
-              className="h-11 w-full rounded-lg border border-input bg-card px-3 text-sm"
+              className="h-11 w-full rounded-lg border border-input bg-card px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="Invalid phone / Wrong number">Invalid phone / Wrong number</option>
               <option value="Customer hostile / Not interested">Customer not interested / Hostile</option>
@@ -80,7 +80,22 @@ export function MoveToJunkButton({
               <option value="Spam / Fake test submission">Spam / Fake test submission</option>
               <option value="Outside service area">Outside service area</option>
               <option value="Already installed elsewhere">Already installed elsewhere</option>
+              <option value="Customer unreachable (multiple attempts)">Customer unreachable (multiple attempts)</option>
+              <option value="Other reason">Other reason</option>
             </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor={`junk-notes-${leadId}`} className="block text-sm font-medium">
+              Additional Details / Explanation
+            </label>
+            <textarea
+              id={`junk-notes-${leadId}`}
+              name="reasonNotes"
+              rows={2}
+              placeholder="e.g. Called 3 times, wrong person or customer refused solar..."
+              className="w-full rounded-lg border border-input bg-card p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">

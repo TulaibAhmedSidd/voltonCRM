@@ -185,6 +185,7 @@ const leadSchema = new Schema(
       id: { type: ObjectId, ref: 'User', default: null },
       name: { type: String, default: null },
       at: { type: Date, default: null },
+      reason: { type: String, default: null },
     },
     quotationSent: { type: Boolean, default: false },
     quotationSentAt: { type: Date, default: null },

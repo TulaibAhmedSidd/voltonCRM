@@ -318,12 +318,14 @@ describe('6. Junk Leads Workflow (Move to Junk, Manager Revert & Purge)', () => 
     const junked = await Lead.findById(junkLeadId).lean()
     expect(junked?.status).toBe('junk')
     expect(junked?.junkedBy?.name).toBe(agentUser.name)
+    expect(junked?.junkedBy?.reason).toBe('Invalid contact details')
     expect(junked?.nextFollowUpAt).toBeNull()
 
     const { Activity } = await import('@/server/db/models')
     const act = await Activity.findOne({ leadId: junkLeadId, type: 'status_changed' }).sort({ at: -1 }).lean()
     expect(act).toBeTruthy()
     expect(act?.data?.junkedBy).toBe(agentUser.name)
+    expect(act?.data?.reason).toBe('Invalid contact details')
   })
 
   it('blocks agents from reverting a junk lead', async () => {

@@ -10,31 +10,79 @@ export interface GoogleDriveConfigStatus {
   targetEmail: string
   isConfigured: boolean
   hasServiceAccount: boolean
+  hasOAuth: boolean
+  isOAuthConnected: boolean
+  authMethod: 'oauth2' | 'service_account' | 'none'
   folderId?: string
+}
+
+export function sanitizeGoogleDriveFolderId(rawId?: string): string | undefined {
+  if (!rawId) return undefined
+  let id = rawId.trim()
+  if (id.includes('/folders/')) {
+    id = id.split('/folders/')[1]?.split('?')[0]?.split('/')[0] ?? id
+  }
+  return id
 }
 
 export function getGoogleDriveConfigStatus(): GoogleDriveConfigStatus {
   const targetEmail = process.env.GOOGLE_DRIVE_BACKUP_EMAIL || 'voltonsolarenergy@gmail.com'
   const serviceEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
+  const folderId = sanitizeGoogleDriveFolderId(process.env.GOOGLE_DRIVE_FOLDER_ID)
+  const hasOAuth = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
+  const isOAuthConnected = Boolean(hasOAuth && process.env.GOOGLE_OAUTH_REFRESH_TOKEN)
+  const hasServiceAccount = Boolean(serviceEmail && privateKey)
 
-  const isConfigured = Boolean(serviceEmail && privateKey)
+  const isConfigured = isOAuthConnected || hasServiceAccount
+  const authMethod: 'oauth2' | 'service_account' | 'none' = isOAuthConnected
+    ? 'oauth2'
+    : hasServiceAccount
+      ? 'service_account'
+      : 'none'
+
   return {
     targetEmail,
     isConfigured,
-    hasServiceAccount: Boolean(serviceEmail),
+    hasServiceAccount,
+    hasOAuth,
+    isOAuthConnected,
+    authMethod,
     folderId,
   }
 }
 
-/** Generate a signed Google OAuth2 JWT for Google Drive API v3 without third-party dependencies */
+/** Obtain an access token for Google Drive API (OAuth 2.0 or Service Account) */
 async function getGoogleDriveAccessToken(): Promise<string> {
+  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+
+  // Priority 1: User OAuth 2.0 (bypasses service account 0-byte quota, utilizes user's 15 GB Drive storage)
+  if (refreshToken && clientId && clientSecret) {
+    const res = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    })
+
+    if (res.ok) {
+      const data = (await res.json()) as { access_token: string }
+      return data.access_token
+    }
+  }
+
+  // Priority 2: Service Account JWT
   const serviceEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
   let privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
 
   if (!serviceEmail || !privateKey) {
-    throw new UserError('Google Service Account credentials (GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY) are not configured in .env.')
+    throw new UserError('Google Drive credentials (OAuth 2.0 or Service Account) are not configured in .env.')
   }
 
   // Handle escaped newlines in env
@@ -86,7 +134,7 @@ async function uploadToDrive(options: {
   description?: string
 }): Promise<{ fileId: string; webViewLink?: string }> {
   const token = await getGoogleDriveAccessToken()
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID
+  const folderId = sanitizeGoogleDriveFolderId(process.env.GOOGLE_DRIVE_FOLDER_ID)
 
   const metadata: Record<string, unknown> = {
     name: options.filename,
