@@ -234,13 +234,57 @@ export async function sendWhatsAppText(leadId: string, text: string, user: Sessi
  * Send a file (e.g. the quotation PDF) to the lead's customer on WhatsApp from the company number they wrote to.
  * Meta allows this only within 24 h of the customer's last message — otherwise the agent sends it from the phone.
  */
+/** The customer has not written to a business number in the last 24 hours (WhatsApp's rule for free-form messages). */
+export class OutsideWindowError extends UserError {}
+
+/**
+ * Quotation outside the 24-hour window: the approved template (WHATSAPP_QUOTE_TEMPLATE) with the PDF as its document
+ * header — Meta downloads it from the customer link. Sent from the number the customer last wrote to, else the agent's
+ * own connected number, else the company number.
+ */
+export async function sendQuotationTemplate(leadId: string, doc: { link: string; filename: string; customerName: string; quotationNo: string }, user: SessionUser): Promise<void> {
+  const template = process.env.WHATSAPP_QUOTE_TEMPLATE
+  if (!template) throw new OutsideWindowError('No WhatsApp quotation template is set up.')
+  await connectDb()
+  const lead = await loadLeadFor(user, leadId, 'work')
+  if ((await hit(`wa_doc:${user.id}`, 20, 60 * 60_000)).blocked) throw new UserError('Too many files sent — wait a little')
+  const lastIn = await Message.findOne({ contactId: lead.contactId, direction: 'in' }).sort({ at: -1 }).select('numberId').lean()
+  const own = await WhatsAppNumber.findOne({ agentId: oid(user.id), status: 'connected' }).select('_id').lean()
+  const sender = await senderFor(lastIn?.numberId ?? own?._id ?? null)
+  if (!sender) throw new UserError('WhatsApp is not connected yet.')
+  const contact = await Contact.findById(lead.contactId).lean()
+  const to = (contact?.whatsappE164 ?? contact?.phones[0] ?? '').replace(/^\+/, '')
+  const res = await fetch(`${GRAPH}/${sender.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${sender.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: template,
+        language: { code: process.env.WHATSAPP_QUOTE_TEMPLATE_LANG || 'en' },
+        components: [
+          { type: 'header', parameters: [{ type: 'document', document: { link: doc.link, filename: doc.filename } }] },
+          { type: 'body', parameters: [{ type: 'text', text: doc.customerName.slice(0, 60) || 'Sir / Madam' }, { type: 'text', text: doc.quotationNo }] },
+        ],
+      },
+    }),
+  })
+  const body = (await res.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message: string } }
+  if (!res.ok || !body.messages?.[0]) throw new UserError(`WhatsApp did not send the template: ${body.error?.message ?? res.status}`)
+  const number = await WhatsAppNumber.findOne({ phoneNumberId: sender.phoneNumberId }).select('_id').lean()
+  if (number) await Message.create({ waMessageId: body.messages[0].id, contactId: lead.contactId, leadId: lead._id, numberId: number._id, direction: 'out', type: 'document', text: `📄 ${doc.filename} (template)`, sentFrom: 'api', sentByUserId: oid(user.id), status: 'sent', at: new Date() })
+  await logActivity(lead._id, 'message_out', user.id, { text: `Sent ${doc.filename} on WhatsApp (template)`, via: 'crm' })
+}
+
 export async function sendWhatsAppDocument(leadId: string, file: { data: Buffer; filename: string; caption: string }, user: SessionUser): Promise<void> {
   await connectDb()
   const lead = await loadLeadFor(user, leadId, 'work')
   if ((await hit(`wa_doc:${user.id}`, 20, 60 * 60_000)).blocked) throw new UserError('Too many files sent — wait a little')
   const lastIn = await Message.findOne({ contactId: lead.contactId, direction: 'in' }).sort({ at: -1 }).select('at numberId').lean()
   if (!lastIn || Date.now() - lastIn.at.getTime() > 24 * 3_600_000) {
-    throw new UserError("WhatsApp only lets the CRM send a file within 24 hours of the customer's last message. Use “Open customer's WhatsApp” and attach the downloaded PDF from your phone.")
+    throw new OutsideWindowError("WhatsApp only lets the CRM send a file within 24 hours of the customer's last message to a company number.")
   }
   const sender = await senderFor(lastIn.numberId)
   if (!sender) throw new UserError('WhatsApp is not connected yet.')

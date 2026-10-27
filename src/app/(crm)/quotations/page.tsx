@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Download, ExternalLink, FileText, MessageCircle, Search } from 'lucide-react'
+import { Download, ExternalLink, FileText, Search } from 'lucide-react'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionCard } from '@/components/common/section-card'
 import { EmptyState } from '@/components/common/states'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { NewQuotationDialog } from '@/components/crm/new-quotation-dialog'
 import { websiteCatalog } from '@/server/services/website'
 import { QuotationStatusSelect } from '@/components/crm/quotation-status-select'
+import { QuotationWhatsAppButton } from '@/components/crm/quotation-whatsapp-button'
 import { requireUser } from '@/server/auth/session'
 import { listCentralQuotations } from '@/server/services/quotations'
 import { listLeads } from '@/server/services/queries'
@@ -151,9 +152,6 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
                   <tbody className="divide-y divide-border">
                     {rows.map((row) => {
                       const digits = row.customer.phone.replace(/\D/g, '')
-                      const waText = encodeURIComponent(
-                        `Assalam o Alaikum ${row.customer.name}, here is your Volton Solar quotation ${row.quotationNo} (Rs ${formatRs(row.total)}).`
-                      )
 
                       return (
                         <tr key={row.id} className="transition-colors hover:bg-muted/20">
@@ -224,20 +222,7 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
                                 </a>
                               </Button>
 
-                              {digits && (
-                                <Button
-                                  asChild
-                                  variant="ghost"
-                                  size="touch"
-                                  className="size-8 p-0 text-tone-success-soft-foreground"
-                                  title="Send to WhatsApp"
-                                >
-                                  <a href={`https://wa.me/${digits}?text=${waText}`} target="_blank" rel="noreferrer">
-                                    <MessageCircle className="size-4" aria-hidden />
-                                    <span className="sr-only">WhatsApp</span>
-                                  </a>
-                                </Button>
-                              )}
+                              {digits && <QuotationWhatsAppButton quotationId={row.id} phone={row.customer.phone} variant="icon" />}
                             </div>
                           </td>
                         </tr>
@@ -251,9 +236,6 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
               <div className="space-y-3 md:hidden">
                 {rows.map((row) => {
                   const digits = row.customer.phone.replace(/\D/g, '')
-                  const waText = encodeURIComponent(
-                    `Assalam o Alaikum ${row.customer.name}, here is your Volton Solar quotation ${row.quotationNo} (Rs ${formatRs(row.total)}).`
-                  )
 
                   return (
                     <div
@@ -306,14 +288,7 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
                             <span>Download</span>
                           </a>
                         </Button>
-                        {digits && (
-                          <Button asChild variant="outline" size="touch" className="h-9 gap-1.5 text-xs text-tone-success-soft-foreground">
-                            <a href={`https://wa.me/${digits}?text=${waText}`} target="_blank" rel="noreferrer">
-                              <MessageCircle className="size-3.5" aria-hidden />
-                              <span>WhatsApp</span>
-                            </a>
-                          </Button>
-                        )}
+                        {digits && <QuotationWhatsAppButton quotationId={row.id} phone={row.customer.phone} variant="compact" />}
                       </div>
                     </div>
                   )

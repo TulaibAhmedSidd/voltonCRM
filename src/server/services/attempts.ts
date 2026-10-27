@@ -216,6 +216,15 @@ async function applyOutcome(attempt: InstanceType<typeof ContactAttempt>, input:
     })
     await attempt.save({ session })
     await FollowUp.updateMany({ leadId: lead._id, status: 'pending' }, { status: 'done', completedAt: now, attemptId: attempt._id, outcome: input.result }, { session })
+    // The try just made IS follow-up N (1 of 3, 2 of 3…). Try 1 never had a scheduled follow-up record, so make sure
+    // the Leads table's "Follow-up N" shows Done whether the agent used the table or the lead page.
+    if (counted && attemptCount <= MAX_FOLLOW_UPS) {
+      await FollowUp.updateOne(
+        { leadId: lead._id, number: attemptCount },
+        { $set: { status: 'done', completedAt: now, attemptId: attempt._id, outcome: input.result }, $setOnInsert: { agentId: oid(user.id), dueAt: now } },
+        { upsert: true, session },
+      )
+    }
     lead.set({
       attemptCount,
       noAnswerStreak,

@@ -17,6 +17,9 @@ import { AuditLog, Contact, FollowUp, Lead, Notification, Team, User, Visit, Wha
 import { formatPktDate, formatPktDateTime } from '@/lib/dates-pkt'
 import { clearProofs, formatBytes, PROOF_RANGES, type ProofRange } from '@/server/services/storage'
 import { en } from '@/i18n/en'
+import type { ActivityItem } from '@/components/crm/lead-timeline'
+import { leadHistory } from '@/server/services/queries'
+import { makeQuoteToken } from '@/server/lib/quote-link'
 import { hashPassword, passwordProblem, safeEqual, verifyPassword, verifyPasswordOrDummy } from '@/server/auth/password'
 import { endSession, requireRole, requireUser, revokeSessions, startSession, type SessionUser } from '@/server/auth/session'
 import { isObjectId, loadLeadFor, loadManagedUser, safeNext } from '@/server/auth/guards'
@@ -30,7 +33,7 @@ import { changeStage, deleteLeads, markQuotationSent, moveToJunk, purgeAllJunkLe
 import { clear, hit, isBlocked } from '@/server/services/rate-limit'
 import { setSetting } from '@/server/services/settings'
 import { assignVisit, createVisit, updateVisit } from '@/server/services/visits'
-import { sendWhatsAppDocument, sendWhatsAppText } from '@/server/services/whatsapp'
+import { sendWhatsAppDocument, sendQuotationTemplate, OutsideWindowError, sendWhatsAppText } from '@/server/services/whatsapp'
 import { saveMetaFormDepartments, subscribeMetaPage, syncMetaLeads } from '@/server/services/meta-leads'
 import { completeEmbeddedSignup } from '@/server/services/whatsapp-onboarding'
 import { createQuotation, createStandaloneQuotation, getQuotationFor, updateQuotationStatus } from '@/server/services/quotations'
@@ -1003,16 +1006,50 @@ export async function createQuotationAction(input: { leadId: string; quotation: 
 }
 
 /** Send a saved quotation PDF to the customer on WhatsApp (from the CRM, within Meta's 24-hour window). */
+/** Customer link to the quotation PDF (30 days, no sign-in) — put in the WhatsApp message instead of attaching a file. */
+async function quotationLink(quotationId: string): Promise<string> {
+  const secret = getServerEnv().AUTH_SECRET
+  if (!secret) throw new UserError('AUTH_SECRET is not set')
+  const h = await headers()
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'volton-crm.vercel.app'
+  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
+  return `${proto}://${host}/api/quotations/share/${makeQuoteToken(quotationId, secret)}`
+}
+
+/** "Open customer's WhatsApp": the ready message with the quotation link (nothing to attach). */
+export async function quotationShareAction(quotationId: string): Promise<{ ok: boolean; message?: string; link?: string; text?: string }> {
+  const user = await requireUser()
+  try {
+    const q = typeof quotationId === 'string' ? await getQuotationFor(user, quotationId) : null
+    if (!q) return { ok: false, message: 'Quotation not found' }
+    const link = await quotationLink(String(q._id))
+    const text = `Assalam o Alaikum ${q.customer.name}, here is your Volton Solar quotation ${q.quotationNo} (Rs ${formatRs(q.total)}).\n\nOpen the PDF: ${link}\n\n— ${q.preparedBy.name}, Volton Solar`
+    return { ok: true, link, text }
+  } catch (error) {
+    return errorState(error) as { ok: boolean; message?: string }
+  }
+}
+
 export async function sendQuotationWhatsAppAction(quotationId: string): Promise<ActionState> {
   const user = await requireUser()
   try {
     const q = typeof quotationId === 'string' ? await getQuotationFor(user, quotationId) : null
     if (!q) return { ok: false, message: 'Quotation not found' }
+    if (!q.leadId) return { ok: false, message: 'This quotation is not linked to a lead — use "Open customer\'s WhatsApp" instead.' }
     const input = quotationInput.parse(q.input)
     const data = await buildQuotationPdf({ quotationNo: q.quotationNo, leadNo: q.leadNo, issuedAt: q.issuedAt, validUntil: q.validUntil, customer: q.customer, preparedBy: q.preparedBy, input }, templateOf(q.input))
     const filename = `Volton-Quotation-${q.quotationNo}.pdf`
     const caption = `Assalam o Alaikum ${q.customer.name}, here is your Volton Solar quotation ${q.quotationNo} (Rs ${formatRs(q.total)}). — ${q.preparedBy.name}`
-    await sendWhatsAppDocument(String(q.leadId), { data, filename, caption }, user)
+    try {
+      await sendWhatsAppDocument(String(q.leadId), { data, filename, caption }, user)
+    } catch (error) {
+      if (!(error instanceof OutsideWindowError)) throw error
+      // Outside 24 h: the approved template carries the PDF (if set up); otherwise the agent sends the link themselves.
+      if (!getServerEnv().WHATSAPP_QUOTE_TEMPLATE) {
+        return { ok: false, message: 'The customer has not messaged the company WhatsApp in the last 24 hours, so WhatsApp does not let the CRM send the file. Tap “Open customer\'s WhatsApp” — the message already has a link to the PDF, just press Send.' }
+      }
+      await sendQuotationTemplate(String(q.leadId), { link: await quotationLink(String(q._id)), filename, customerName: q.customer.name, quotationNo: q.quotationNo }, user)
+    }
     refresh()
     return { ok: true, message: `Sent ${q.quotationNo} to ${q.customer.name} on WhatsApp.` }
   } catch (error) {
@@ -1177,6 +1214,8 @@ export interface LeadDetailsView {
   name?: string
   /** Fixed facts: when, where from, form answers. */
   facts?: [string, string][]
+  /** Everything that happened on the lead, newest first. */
+  history?: ActivityItem[]
   /** Every other Sheet column, exactly as named in the Sheet. */
   extra?: [string, string][]
 }
@@ -1206,7 +1245,8 @@ export async function getLeadDetailsAction(leadId: string): Promise<LeadDetailsV
     const extra = Object.entries((lead.extra ?? {}) as Record<string, unknown>)
       .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
       .map(([k, v]) => [k, String(v)] as [string, string])
-    return { ok: true, leadNo: lead.leadNo, name: contact?.name ?? '', facts, extra }
+    const history = await leadHistory(lead._id)
+    return { ok: true, leadNo: lead.leadNo, name: contact?.name ?? '', facts, extra, history }
   } catch (error) {
     return { ok: false, message: errorState(error)?.message ?? 'Could not load' }
   }

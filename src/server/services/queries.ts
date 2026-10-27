@@ -38,6 +38,7 @@ interface LeadLike {
   source?: { channel?: string | null; platform?: string | null; campaignName?: string | null; formName?: string | null; ctwa?: { headline?: string | null; sourceId?: string | null } | null } | null
   assignment?: { agentId?: unknown; state?: string | null; assignedAt?: Date | null } | null
   attemptCount?: number | null
+  reopenedAt?: Date | null
   nextFollowUpAt?: Date | null
   receivedAt: Date
   unlockedForAgent?: boolean
@@ -135,7 +136,11 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
     followUps: [1, 2, 3].map((num) => {
       const list = maps.followUps?.get(String(l._id)) ?? []
       const found = list.find((item) => item.number === num)
-      return found ?? { number: num, status: 'pending' as const }
+      // Tries counted on the lead (lead page OR this table) are the truth: try N done = follow-up N done.
+      // After a manager re-opens a lead, older follow-ups no longer count (fresh 3 tries).
+      const freshDone = found?.status === 'done' && (!l.reopenedAt || (found.completedAt && new Date(found.completedAt) >= new Date(l.reopenedAt)))
+      const done = (l.attemptCount ?? 0) >= num || !!freshDone
+      return { ...(found ?? {}), number: num, status: done ? ('done' as const) : ('pending' as const) }
     }),
     isLocked:
       user.role === 'agent' &&
@@ -813,4 +818,28 @@ export async function getTeamAttendanceHistory(
     checkedInTodayCount: todayCheckedInUserIds.size,
     totalEmployeesCount: users.length,
   }
+}
+
+/** A lead's whole history, newest first, with people's names (lead page timeline and the lead details pop-up). */
+export async function leadHistory(leadId: Types.ObjectId | string, limit = 300) {
+  await connectDb()
+  const activities = await Activity.find({ leadId: oid(String(leadId)) }).sort({ at: -1 }).limit(limit).lean()
+  const ids = new Set<string>()
+  for (const a of activities) {
+    const d = (a.data ?? {}) as Record<string, unknown>
+    for (const v of [a.actorId, d.agentId, d.from]) if (v && Types.ObjectId.isValid(String(v))) ids.add(String(v))
+  }
+  const people = new Map((await User.find({ _id: { $in: [...ids].map(oid) } }).select('name').lean()).map((u) => [String(u._id), u.name]))
+  return activities.map((a) => {
+    const d = (a.data ?? {}) as Record<string, unknown>
+    const targetAgentName = d.agentId ? people.get(String(d.agentId)) : undefined
+    const fromAgentName = d.from ? people.get(String(d.from)) : undefined
+    return {
+      id: String(a._id),
+      type: a.type as string,
+      at: iso(a.at)!,
+      actor: a.actorId ? people.get(String(a.actorId)) : undefined,
+      data: { ...d, ...(targetAgentName ? { targetAgentName } : {}), ...(fromAgentName ? { fromAgentName } : {}) },
+    }
+  })
 }

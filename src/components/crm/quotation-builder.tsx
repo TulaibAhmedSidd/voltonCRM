@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Download, FileText, MessageCircle, Plus, Send, Share2, Trash2 } from 'lucide-react'
+import { Download, FileText, Plus, Send, Share2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   BATTERY_SUGGESTIONS,
@@ -21,6 +21,7 @@ import {
 } from '@/domain/quotation'
 import type { CatalogItem, WebsiteCatalog } from '@/domain/website'
 import { createQuotationAction, createStandaloneQuotationAction, sendQuotationWhatsAppAction } from '@/server/actions'
+import { QuotationWhatsAppButton } from '@/components/crm/quotation-whatsapp-button'
 import { defaultQuotation } from '@/domain/quotation'
 import { cn } from '@/lib/utils'
 
@@ -62,8 +63,7 @@ function Section({ n, title, children }: { n: number; title: string; children: R
 function PdfButtons({ id, no, total, customer, onShare }: { id: string; no: string; total: number; customer: { name: string; phone: string }; onShare: (id: string, no: string) => void }) {
   const [sending, startSend] = useTransition()
   const [sent, setSent] = useState<{ ok: boolean; message?: string } | null>(null)
-  const digits = customer.phone.replace(/\D/g, '')
-  const text = encodeURIComponent(`Assalam o Alaikum ${customer.name}, here is your Volton Solar quotation ${no} (Rs ${formatRs(total)}). The PDF is attached.`)
+  void total
   return (
     <div className="w-full space-y-2 sm:w-auto">
       <div className="flex flex-wrap gap-2">
@@ -96,14 +96,7 @@ function PdfButtons({ id, no, total, customer, onShare }: { id: string; no: stri
           <Share2 aria-hidden />
           Share from phone
         </Button>
-        {digits ? (
-          <Button asChild variant="outline" size="touch">
-            <a href={`https://wa.me/${digits}?text=${text}`} target="_blank" rel="noreferrer">
-              <MessageCircle aria-hidden />
-              Open customer&apos;s WhatsApp
-            </a>
-          </Button>
-        ) : null}
+        <QuotationWhatsAppButton quotationId={id} phone={customer.phone} />
       </div>
       {sent?.message ? <p className={cn('rounded-lg px-3 py-2 text-xs', sent.ok ? 'bg-tone-success-soft text-tone-success-soft-foreground' : 'bg-tone-warning-soft text-tone-warning-soft-foreground')}>{sent.message}</p> : null}
     </div>

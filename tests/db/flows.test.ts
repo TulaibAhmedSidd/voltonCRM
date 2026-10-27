@@ -157,6 +157,38 @@ describe('proof of work and the 1-1-3 follow-up plan', () => {
     expect(await Notification.exists({ type: 'lead_unreachable' })).toBeTruthy()
   })
 
+  it('a try saved from the lead page marks that follow-up Done in the Leads table (1 of 3, then 2 of 3)', async () => {
+    const w = await world()
+    const agent = w.agents[0]
+    await checkIn(agent.id)
+    const r = await newLead()
+    if (r.status !== 'created') throw new Error()
+    await acceptLead(r.leadId, agent.id)
+    const away = { leftAt: new Date(Date.now() - 60_000), returnedAt: new Date() }
+    const first = await tapAttempt(r.leadId, 'whatsapp_chat', agent)
+    await logOutcome({ attemptId: first.attemptId, result: 'connected', response: 'call_back_requested', closeLead: false, ...away }, agent)
+    expect(await FollowUp.findOne({ leadId: r.leadId, number: 1 }).lean()).toMatchObject({ status: 'done' })
+    expect(await FollowUp.findOne({ leadId: r.leadId, number: 2 }).lean()).toMatchObject({ status: 'pending' })
+
+    const { listLeads } = await import('@/server/services/queries')
+    const session = { id: agent.id, name: 'A', email: 'a@x.test', role: 'agent', departmentId: null, departmentCode: 'INSTALLATION', managerId: null, mustChangePassword: false } as never
+    const row = (await listLeads(session, { view: 'mine' })).rows.find((l) => l.id === r.leadId)!
+    expect(row.followUps?.map((f) => f.status)).toEqual(['done', 'pending', 'pending'])
+
+    await ContactAttempt.collection.updateMany({ leadId: new mongoose.Types.ObjectId(r.leadId) }, { $set: { serverTapAt: new Date(Date.now() - 86_400_000) } })
+    const second = await tapAttempt(r.leadId, 'phone_call', agent)
+    await logOutcome({ attemptId: second.attemptId, result: 'no_answer', closeLead: false, ...away }, agent)
+    const row2 = (await listLeads(session, { view: 'mine' })).rows.find((l) => l.id === r.leadId)!
+    expect(row2.followUps?.map((f) => f.status)).toEqual(['done', 'done', 'pending'])
+
+    // the lead details pop-up shows the whole history, newest first, with people's names
+    const { leadHistory } = await import('@/server/services/queries')
+    const history = await leadHistory(r.leadId)
+    expect(history.filter((h) => h.type === 'attempt_logged')).toHaveLength(2)
+    expect(history.at(-1)?.type).toBe('lead_created')
+    expect(history.find((h) => h.type === 'attempt_logged')?.actor).toBeTruthy()
+  })
+
   it('flags an outcome logged without leaving the app', async () => {
     const w = await world()
     const agent = w.agents[0]

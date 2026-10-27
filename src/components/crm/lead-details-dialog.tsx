@@ -5,10 +5,12 @@ import { FileSpreadsheet, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { getLeadDetailsAction, type LeadDetailsView } from '@/server/actions'
+import { LeadTimeline } from '@/components/crm/lead-timeline'
 
 /**
- * "Sheet details" pop-up: every column the Google Sheet sent for this lead (form answers, campaign, and all extra
- * columns with their values). Loads only when opened.
+ * Lead details pop-up: where the lead came from, its full history (received, assigned, every call result, stage and
+ * status changes, notes, follow-ups, quotations…) and every extra column the Sheet / form / file sent. Loads only
+ * when opened.
  */
 export function LeadDetailsDialog({ leadId, label = 'Sheet details', compact = false }: { leadId: string; label?: string; compact?: boolean }) {
   const [data, setData] = useState<LeadDetailsView | null>(null)
@@ -25,10 +27,10 @@ export function LeadDetailsDialog({ leadId, label = 'Sheet details', compact = f
           {compact ? null : label}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{data?.ok ? `${data.name || 'Lead'} · ${data.leadNo}` : 'Lead details'}</DialogTitle>
-          <DialogDescription>Everything the Google Sheet / form sent for this lead.</DialogDescription>
+          <DialogDescription>Where it came from, everything that happened to it, and every column the Sheet / form sent.</DialogDescription>
         </DialogHeader>
         {pending || !data ? (
           <p className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
@@ -46,6 +48,10 @@ export function LeadDetailsDialog({ leadId, label = 'Sheet details', compact = f
                 </div>
               ))}
             </dl>
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">History ({data.history?.length ?? 0})</p>
+              {data.history?.length ? <LeadTimeline activities={data.history} /> : <p className="text-sm text-muted-foreground">Nothing has happened on this lead yet.</p>}
+            </div>
             <div className="space-y-2">
               <p className="text-sm font-semibold">Extra columns ({data.extra?.length ?? 0})</p>
               {data.extra?.length ? (
