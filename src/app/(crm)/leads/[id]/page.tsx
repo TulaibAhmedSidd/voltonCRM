@@ -37,6 +37,7 @@ import { websiteCatalog } from '@/server/services/website'
 import { PingAgent } from '@/components/crm/ping-agent'
 import { defaultQuotation } from '@/domain/quotation'
 import { lastQuotationInput, listQuotations } from '@/server/services/quotations'
+import { NumberField } from '@/components/common/number-input'
 
 export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
   const user = await requireUser()
@@ -230,7 +231,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               <input type="hidden" name="leadId" value={lead.id} />
               <SelectField label="Stage" name="stage" defaultValue={lead.stage} options={PIPELINES[lead.department].map((s) => ({ value: s, label: STAGE_META[s].label }))} />
               <SelectField label="If lost — why" name="lostReason" placeholder="—" options={optionsFor(LOST_REASONS, en.lostReason)} />
-              <TextField label="If won — value (PKR)" name="wonValuePkr" type="number" min={0} inputMode="numeric" />
+              <NumberField label="If won — value (PKR)" name="wonValuePkr" min={0} />
               <Button type="submit" variant="secondary" size="touch">
                 Update stage
               </Button>
@@ -392,9 +393,9 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
               <input type="hidden" name="leadId" value={lead.id} />
               <div className="grid gap-3 sm:grid-cols-2">
                 <SelectField label="Property" name="propertyType" placeholder="—" defaultValue={String(site.propertyType ?? '')} options={optionsFor(PROPERTY_TYPES, en.propertyType)} />
-                <TextField label="Monthly bill (PKR)" name="monthlyBillPkr" type="number" min={0} defaultValue={site.monthlyBillPkr as number | undefined} />
-                <TextField label="Monthly units (kWh)" name="monthlyUnits" type="number" min={0} defaultValue={site.monthlyUnits as number | undefined} hint="kW suggestion ≈ units ÷ 120" />
-                <TextField label="Target size (kW)" name="targetKw" type="number" min={0} step="0.5" defaultValue={site.targetKw as number | undefined} />
+                <NumberField label="Monthly bill (PKR)" name="monthlyBillPkr" min={0} defaultValue={site.monthlyBillPkr as number | undefined} />
+                <NumberField label="Monthly units (kWh)" name="monthlyUnits" min={0} defaultValue={site.monthlyUnits as number | undefined} hint="kW suggestion ≈ units ÷ 120" />
+                <NumberField label="Target size (kW)" name="targetKw" decimals min={0} defaultValue={site.targetKw as number | undefined} />
                 <SelectField label="Roof" name="roofType" placeholder="—" defaultValue={String(site.roofType ?? '')} options={optionsFor(ROOF_TYPES, en.roofType)} />
                 <SelectField label="Shading" name="shading" placeholder="—" defaultValue={String(site.shading ?? '')} options={optionsFor(SHADING_LEVELS, en.shading)} />
               </div>
@@ -423,7 +424,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
                 <input type="hidden" name="phone" value={lead.phone} />
                 <TextField label="Address" name="address" required defaultValue={[lead.area, lead.city].filter(Boolean).join(', ')} />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <TextField label="System size (kW)" name="kw" type="number" min={1} step="0.5" required defaultValue={site.targetKw as number | undefined} />
+                  <NumberField label="System size (kW)" name="kw" decimals min={1} required defaultValue={site.targetKw as number | undefined} />
                   <TextField label="Visit date & time" name="scheduledAt" type="datetime-local" />
                 </div>
                 <TextField label="Location link (optional)" name="locationUrl" type="url" />

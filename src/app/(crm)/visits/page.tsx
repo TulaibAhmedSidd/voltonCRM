@@ -14,6 +14,7 @@ import { requireRole } from '@/server/auth/session'
 import { createVisitAction, updateVisitAction } from '@/server/actions'
 import { getTeamBoard, listVisits } from '@/server/services/queries'
 import { FIELD_AGENT_VISIT_STATUSES, fieldAgentLoad } from '@/server/services/visits'
+import { NumberField } from '@/components/common/number-input'
 
 export const metadata = { title: 'Site visits' }
 
@@ -56,7 +57,7 @@ export default async function VisitsPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <TextField label="Customer name" name="customerName" required />
                 <TextField label="Phone" name="phone" required inputMode="tel" />
-                <TextField label="System size (kW)" name="kw" type="number" min={1} step="0.5" required />
+                <NumberField label="System size (kW)" name="kw" decimals min={1} required />
                 <TextField label="Visit date & time" name="scheduledAt" type="datetime-local" />
               </div>
               <TextField label="Address" name="address" required />

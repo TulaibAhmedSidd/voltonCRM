@@ -33,6 +33,8 @@ avatar · badge · button · card · checkbox · dialog · dropdown-menu · inpu
 | ServiceWorker / InstallPrompt (client) | pwa.tsx | — | SW registration (root layout) and the "Install app" banner (Android button, iPhone Share steps) |
 | AppShell (client) | app-shell.tsx | `role, userName, actions?, children` | Signed-in layout: sidebar (lg+), top bar + bottom nav (phones). Items from `src/domain/navigation.ts` |
 
+| NumberInput / NumberField (client) | number-input.tsx | Number boxes for the whole app: text box + digits only (src/lib/numeric.ts), no stuck 0 or leading zeros, min/max check. `NumberInput value onValueChange decimals?` (controlled) · `NumberField label name min? max? decimals? defaultValue? required?` (forms). Never use type="number". |
+
 ## Layer 3 — CRM (`src/components/crm`)
 | Component | File | Props |
 |---|---|---|

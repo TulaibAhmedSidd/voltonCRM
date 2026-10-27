@@ -24,6 +24,7 @@ import { createQuotationAction, createStandaloneQuotationAction, sendQuotationWh
 import { QuotationWhatsAppButton } from '@/components/crm/quotation-whatsapp-button'
 import { defaultQuotation } from '@/domain/quotation'
 import { cn } from '@/lib/utils'
+import { NumberInput } from '@/components/common/number-input'
 
 export interface QuotationRow {
   id: string
@@ -208,12 +209,12 @@ export function QuotationBuilder({
   const [selectedLeadId, setSelectedLeadId] = useState(leadId || '')
 
   const set = <K extends keyof QuotationInput>(key: K, value: QuotationInput[K]) => setQ((prev) => ({ ...prev, [key]: value }))
+  // Number boxes: plain text that only takes digits — no stuck "0", no "031000" (src/components/common/number-input.tsx).
   const num = (key: keyof QuotationInput) => ({
-    type: 'number' as const,
-    inputMode: 'decimal' as const,
+    decimals: key === 'systemKw' || key === 'panelWarrantyYears',
     min: 0,
     value: Number.isFinite(q[key] as number) ? (q[key] as number) : 0,
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(key, (e.target.value === '' ? 0 : Number(e.target.value)) as never),
+    onValueChange: (n: number) => set(key, n as never),
     className: control,
   })
   const txt = (key: keyof QuotationInput, list?: string) => ({ value: String(q[key] ?? ''), onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(key, e.target.value as never), className: control, list })
@@ -381,7 +382,7 @@ export function QuotationBuilder({
                 </select>
               </Field>
               <Field label="System size (kW)" hint={totals.panelKwp ? `Panels give ${totals.panelKwp} kWp` : undefined}>
-                <input {...num('systemKw')} step="0.5" />
+                <NumberInput {...num('systemKw')} />
               </Field>
             </div>
           </Section>
@@ -393,13 +394,13 @@ export function QuotationBuilder({
                 <input {...txt('panelModel', 'q-panels')} placeholder="e.g. LONGi Hi-MO X10 645W" />
               </Field>
               <Field label="Watt per panel">
-                <input {...num('panelWatt')} />
+                <NumberInput {...num('panelWatt')} />
               </Field>
               <Field label="Quantity">
-                <input {...num('panelQty')} />
+                <NumberInput {...num('panelQty')} />
               </Field>
               <Field label="Price per panel (Rs)" className="sm:col-span-2">
-                <input {...num('panelPrice')} />
+                <NumberInput {...num('panelPrice')} />
               </Field>
             </div>
           </Section>
@@ -411,10 +412,10 @@ export function QuotationBuilder({
                 <input {...txt('inverterModel', 'q-inverters')} placeholder="e.g. GoodWe 12kW SP" />
               </Field>
               <Field label="Quantity">
-                <input {...num('inverterQty')} />
+                <NumberInput {...num('inverterQty')} />
               </Field>
               <Field label="Price each (Rs)">
-                <input {...num('inverterPrice')} />
+                <NumberInput {...num('inverterPrice')} />
               </Field>
             </div>
           </Section>
@@ -426,10 +427,10 @@ export function QuotationBuilder({
                 <input {...txt('batteryModel', 'q-batteries')} placeholder="e.g. Itel 51.2V 100Ah LiFePO4" />
               </Field>
               <Field label="Quantity">
-                <input {...num('batteryQty')} />
+                <NumberInput {...num('batteryQty')} />
               </Field>
               <Field label="Price each (Rs)">
-                <input {...num('batteryPrice')} />
+                <NumberInput {...num('batteryPrice')} />
               </Field>
             </div>
           </Section>
@@ -449,19 +450,19 @@ export function QuotationBuilder({
                 <input {...txt('structureDetails')} placeholder="e.g. 14 gauge, galvanised, with walkway" />
               </Field>
               <Field label="Structure price (Rs)">
-                <input {...num('structurePrice')} />
+                <NumberInput {...num('structurePrice')} />
               </Field>
               <Field label="Wiring & cables" className="sm:col-span-3">
                 <input {...txt('wiringDetails')} placeholder="e.g. DC Pak Cable 4mm, AC Pakistan Cable" />
               </Field>
               <Field label="Wiring price (Rs)">
-                <input {...num('wiringPrice')} />
+                <NumberInput {...num('wiringPrice')} />
               </Field>
               <Field label="Protection & accessories" className="sm:col-span-3">
                 <input {...txt('protectionDetails')} placeholder="Breakers, SPD, DB box, earthing" />
               </Field>
               <Field label="Price (Rs)" hint="0 = shown as Included">
-                <input {...num('protectionPrice')} />
+                <NumberInput {...num('protectionPrice')} />
               </Field>
             </div>
           </Section>
@@ -473,16 +474,16 @@ export function QuotationBuilder({
                 Include net metering (K-Electric application & meter)
               </label>
               <Field label="Net metering price (Rs)">
-                <input {...num('netMeteringPrice')} disabled={!q.netMetering} />
+                <NumberInput {...num('netMeteringPrice')} disabled={!q.netMetering} />
               </Field>
               <Field label="Transportation (Rs)">
-                <input {...num('transportPrice')} />
+                <NumberInput {...num('transportPrice')} />
               </Field>
               <Field label="Labour / installation" className="sm:col-span-3">
                 <input {...txt('labourDetails')} />
               </Field>
               <Field label="Labour price (Rs)">
-                <input {...num('labourPrice')} />
+                <NumberInput {...num('labourPrice')} />
               </Field>
             </div>
           </Section>
@@ -494,10 +495,10 @@ export function QuotationBuilder({
                   <input className={control} value={e.description} onChange={(ev) => set('extras', q.extras.map((x, j) => (j === i ? { ...x, description: ev.target.value } : x)))} />
                 </Field>
                 <Field label="Qty">
-                  <input className={control} type="number" min={0} value={e.qty} onChange={(ev) => set('extras', q.extras.map((x, j) => (j === i ? { ...x, qty: Number(ev.target.value) || 0 } : x)))} />
+                  <NumberInput className={control} decimals min={0} value={e.qty} onValueChange={(n) => set('extras', q.extras.map((x, j) => (j === i ? { ...x, qty: n } : x)))} />
                 </Field>
                 <Field label="Price each (Rs)">
-                  <input className={control} type="number" min={0} value={e.unitPrice} onChange={(ev) => set('extras', q.extras.map((x, j) => (j === i ? { ...x, unitPrice: Number(ev.target.value) || 0 } : x)))} />
+                  <NumberInput className={control} min={0} value={e.unitPrice} onValueChange={(n) => set('extras', q.extras.map((x, j) => (j === i ? { ...x, unitPrice: n } : x)))} />
                 </Field>
                 <Button type="button" variant="ghost" size="icon-touch" aria-label="Remove item" onClick={() => set('extras', q.extras.filter((_, j) => j !== i))}>
                   <Trash2 />
@@ -527,7 +528,7 @@ export function QuotationBuilder({
                 <input {...txt('batteryWarranty')} />
               </Field>
               <Field label="Free after-sales service (years)">
-                <input {...num('serviceYears')} />
+                <NumberInput {...num('serviceYears')} />
               </Field>
             </div>
           </Section>
@@ -535,7 +536,7 @@ export function QuotationBuilder({
           <Section n={9} title="Terms">
             <div className="grid gap-3 sm:grid-cols-4">
               <Field label="Valid for (days)">
-                <input {...num('validityDays')} min={1} max={90} />
+                <NumberInput {...num('validityDays')} min={1} max={90} />
               </Field>
               <Field label="Installation time" className="sm:col-span-3">
                 <input {...txt('installationDays')} />
@@ -560,7 +561,7 @@ export function QuotationBuilder({
                 <p className="text-xs text-muted-foreground">{rupeesInWords(totals.total)}</p>
               </div>
               <Field label="Discount (Rs)">
-                <input {...num('discount')} />
+                <NumberInput {...num('discount')} />
               </Field>
             </div>
             <label className="flex min-h-11 items-center gap-3 text-sm">

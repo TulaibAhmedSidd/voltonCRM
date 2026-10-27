@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, BadgeCheck, CalendarCheck, ListOrdered, UserCheck, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ActionForm } from '@/components/common/action-form'
-import { CheckboxField, TextField } from '@/components/common/fields'
+import { CheckboxField } from '@/components/common/fields'
 import { PageHeader } from '@/components/common/page-header'
 import { SectionBack, SectionHub } from '@/components/common/section-hub'
 import { HashToSection } from '@/components/common/hash-to-section'
@@ -17,6 +17,7 @@ import { PingAgent } from '@/components/crm/ping-agent'
 import { getTeamAttendanceHistory, getTeamBoard, getTeams, listUsers } from '@/server/services/queries'
 import { RolesSection, UsersSection } from '@/components/crm/users-section'
 import { ROLE_META } from '@/domain/ui-maps'
+import { NumberField } from '@/components/common/number-input'
 
 export const metadata = { title: 'Team' }
 
@@ -173,10 +174,10 @@ export default async function TeamPage(props: PageProps<'/team'>) {
               <ActionForm action={updateTeamSettingsAction}>
                 <input type="hidden" name="teamId" value={team.id} />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <TextField label="Manager window (min, 0 = auto at once)" name="managerWindowMin" type="number" min={0} max={60} defaultValue={team.settings.managerWindowMin} />
-                  <TextField label="Agent must accept within (min)" name="acceptWithinMin" type="number" min={1} max={120} defaultValue={team.settings.acceptWithinMin} />
-                  <TextField label="First call/WhatsApp within (min)" name="contactWithinMin" type="number" min={5} max={240} defaultValue={team.settings.contactWithinMin} />
-                  <TextField label="Max leads waiting to accept, per agent" name="maxPendingAccept" type="number" min={1} max={20} defaultValue={team.settings.maxPendingAccept} />
+                  <NumberField label="Manager window (min, 0 = auto at once)" name="managerWindowMin" min={0} max={60} defaultValue={team.settings.managerWindowMin} />
+                  <NumberField label="Agent must accept within (min)" name="acceptWithinMin" min={1} max={120} defaultValue={team.settings.acceptWithinMin} />
+                  <NumberField label="First call/WhatsApp within (min)" name="contactWithinMin" min={5} max={240} defaultValue={team.settings.contactWithinMin} />
+                  <NumberField label="Max leads waiting to accept, per agent" name="maxPendingAccept" min={1} max={20} defaultValue={team.settings.maxPendingAccept} />
                 </div>
                 <CheckboxField label="If not accepted in time, move the lead to the next agent" name="autoMoveOnAcceptTimeout" defaultChecked={team.settings.autoMoveOnAcceptTimeout} />
                 <CheckboxField label="Give new leads only to agents who are checked in (recommended)" name="requireCheckIn" defaultChecked={team.settings.requireCheckIn} />

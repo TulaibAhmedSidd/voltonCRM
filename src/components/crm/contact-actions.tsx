@@ -13,6 +13,7 @@ import { ATTEMPT_CHANNEL_META, CALL_RESULT_META, CUSTOMER_RESPONSE_META } from '
 import { formatDuration } from '@/lib/duration'
 import { cancelAttemptAction, logOutcomeAction, tapAttemptAction } from '@/server/actions'
 import { cn } from '@/lib/utils'
+import { NumberField } from '@/components/common/number-input'
 
 /** Big thumb-sized tiles: icon on top, label below — fits 3 across on any phone. */
 const BIG_TILE = 'h-20 flex-col gap-1 px-1 text-base [&_svg:not([class*=size-])]:size-7'
@@ -301,8 +302,8 @@ function OutcomeForm({ attemptId, attemptCount, times, leadCity, onDone }: { att
               </label>
             ))}
           </div>
-          {response === 'deal_won' ? <TextField label="Sale value (PKR)" name="wonValuePkr" type="number" min={1} inputMode="numeric" required /> : null}
-          <TextField label="Call length (minutes, optional)" name="durationMin" type="number" min={0} step="0.5" inputMode="decimal" />
+          {response === 'deal_won' ? <NumberField label="Sale value (PKR)" name="wonValuePkr" min={1} required /> : null}
+          <NumberField label="Call length (minutes, optional)" name="durationMin" decimals min={0} />
         </>
       ) : null}
       {result ? (
