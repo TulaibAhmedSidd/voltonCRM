@@ -16,6 +16,7 @@ import { defaultQuotation } from '@/domain/quotation'
 import { ActionForm } from '@/components/common/action-form'
 import { markQuotationSentAction } from '@/server/actions'
 import type { WebsiteCatalog } from '@/domain/website'
+import { cn } from '@/lib/utils'
 
 export function SendQuotationDialog({
   leadId,
@@ -24,6 +25,7 @@ export function SendQuotationDialog({
   customerPhone,
   quotationSent,
   catalog,
+  compact = false,
 }: {
   leadId: string
   leadNo: string
@@ -31,6 +33,7 @@ export function SendQuotationDialog({
   customerPhone: string
   quotationSent?: boolean
   catalog?: WebsiteCatalog
+  compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const initial = defaultQuotation()
@@ -39,13 +42,16 @@ export function SendQuotationDialog({
     return (
       <Button
         variant="outline"
-        size="touch"
+        size={compact ? 'sm' : 'touch'}
         disabled
-        className="gap-1.5 text-xs font-medium opacity-80 cursor-not-allowed bg-muted/40"
+        className={cn(
+          'text-xs font-medium opacity-80 cursor-not-allowed bg-muted/40',
+          compact ? 'h-8 px-2 gap-1' : 'gap-1.5'
+        )}
         title="Quotation already sent to customer. To send additional quotations, open the Lead Details page."
       >
         <Check className="size-3.5 text-tone-success-soft-foreground" aria-hidden />
-        <span>Quotation Sent ✓</span>
+        <span>{compact ? 'Sent' : 'Quotation Sent ✓'}</span>
       </Button>
     )
   }
@@ -53,9 +59,14 @@ export function SendQuotationDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="touch" className="gap-1.5 text-xs font-medium">
+        <Button
+          variant="outline"
+          size={compact ? 'sm' : 'touch'}
+          className={cn('text-xs font-medium', compact ? 'h-8 px-2 gap-1' : 'gap-1.5')}
+          title="Send Quotation"
+        >
           <FileText className="size-3.5" aria-hidden />
-          <span>Send Quotation</span>
+          <span>{compact ? 'Quote' : 'Send Quotation'}</span>
         </Button>
       </DialogTrigger>
 

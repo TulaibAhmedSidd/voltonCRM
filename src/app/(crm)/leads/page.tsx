@@ -21,7 +21,7 @@ import type { LeadSummary } from '@/domain/view-models'
 import { formatPktDateTime } from '@/lib/dates-pkt'
 import { formatPhone, maskPhone } from '@/lib/phone'
 import { requireUser } from '@/server/auth/session'
-import { ArrowLeft, List, Lock, RotateCcw, Users } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Clock, List, Lock, RotateCcw, Users } from 'lucide-react'
 import { FollowUpButtonModal } from '@/components/crm/follow-up-modal'
 import { SendQuotationDialog } from '@/components/crm/send-quotation-dialog'
 import { websiteCatalog } from '@/server/services/website'
@@ -143,13 +143,13 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     {
       key: 'followup1',
       header: (
-        <div className="flex flex-col items-center justify-center leading-none gap-0.5">
-          <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Follow-up</span>
+        <div className="flex flex-col items-center justify-center leading-none gap-0.5" title="Follow-up 1">
+          <span className="text-[10px] uppercase font-semibold text-muted-foreground">F-Up</span>
           <span className="text-xs font-bold text-foreground">1</span>
         </div>
       ),
       align: 'center',
-      className: 'w-[80px] min-w-[76px] px-1 text-center',
+      className: 'w-[48px] min-w-[48px] max-w-[52px] px-0.5 text-center',
       cell: (l) => {
         const fu = l.followUps?.find((f) => f.number === 1) ?? { number: 1, status: 'pending' as const }
         return (
@@ -167,13 +167,13 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     {
       key: 'followup2',
       header: (
-        <div className="flex flex-col items-center justify-center leading-none gap-0.5">
-          <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Follow-up</span>
+        <div className="flex flex-col items-center justify-center leading-none gap-0.5" title="Follow-up 2">
+          <span className="text-[10px] uppercase font-semibold text-muted-foreground">F-Up</span>
           <span className="text-xs font-bold text-foreground">2</span>
         </div>
       ),
       align: 'center',
-      className: 'w-[80px] min-w-[76px] px-1 text-center',
+      className: 'w-[48px] min-w-[48px] max-w-[52px] px-0.5 text-center',
       cell: (l) => {
         const fu = l.followUps?.find((f) => f.number === 2) ?? { number: 2, status: 'pending' as const }
         return (
@@ -192,13 +192,13 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     {
       key: 'followup3',
       header: (
-        <div className="flex flex-col items-center justify-center leading-none gap-0.5">
-          <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Follow-up</span>
+        <div className="flex flex-col items-center justify-center leading-none gap-0.5" title="Follow-up 3">
+          <span className="text-[10px] uppercase font-semibold text-muted-foreground">F-Up</span>
           <span className="text-xs font-bold text-foreground">3</span>
         </div>
       ),
       align: 'center',
-      className: 'w-[80px] min-w-[76px] px-1 text-center',
+      className: 'w-[48px] min-w-[48px] max-w-[52px] px-0.5 text-center',
       cell: (l) => {
         const fu = l.followUps?.find((f) => f.number === 3) ?? { number: 3, status: 'pending' as const }
         return (
@@ -214,10 +214,10 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         )
       },
     },
-    
     {
       key: 'junkAction',
       header: '',
+      className: 'w-[40px] min-w-[40px] text-center px-0.5',
       cell: (l) => (
         <MoveToJunkButton
           leadId={l.id}
@@ -267,7 +267,8 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
       : []),
     {
       key: 'quote',
-      header: 'Quotation',
+      header: 'Quote',
+      className: 'w-[75px] min-w-[75px] px-1',
       cell: (l) => (
         <SendQuotationDialog
           leadId={l.id}
@@ -276,11 +277,23 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           customerPhone={l.phone}
           quotationSent={l.quotationSent}
           catalog={catalog}
+          compact
         />
       ),
     },
-    { key: 'received', header: 'Received', sortable: true, cell: (l) => formatPktDateTime(new Date(l.receivedAt)) },
-    { key: 'details', header: 'Details', cell: (l) => <LeadDetailsDialog leadId={l.id} compact /> },
+    {
+      key: 'received',
+      header: 'Received',
+      sortable: true,
+      className: 'whitespace-nowrap text-xs text-muted-foreground w-[110px] min-w-[110px] px-1.5',
+      cell: (l) => formatPktDateTime(new Date(l.receivedAt))
+    },
+    {
+      key: 'details',
+      header: '',
+      className: 'w-[40px] min-w-[40px] text-center px-0.5',
+      cell: (l) => <LeadDetailsDialog leadId={l.id} compact />
+    },
   ]
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const queuePanels = view === 'unassigned' && user.role !== 'agent' ? await getQueuePanels(user) : []
@@ -382,6 +395,27 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
             sortHref={(key, dir) => href({ sort: key, dir, page: undefined })}
             caption="Leads"
           />
+          {/* Follow-up status legend / guide */}
+          <div className="hidden md:flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground rounded-lg bg-card/60 ring-1 ring-foreground/10">
+            <div className="flex items-center gap-4">
+              <span className="font-semibold text-foreground text-[11px] uppercase tracking-wider">Follow-up Guide:</span>
+              <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                <span className="inline-flex size-4 items-center justify-center rounded-md bg-tone-success-soft text-tone-success-soft-foreground ring-1 ring-tone-success/40">
+                  <CheckCircle2 className="size-3" aria-hidden />
+                </span>
+                <span>Green = Done</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                <span className="inline-flex size-4 items-center justify-center rounded-md bg-tone-danger-soft text-tone-danger-soft-foreground ring-1 ring-tone-danger/40">
+                  <Clock className="size-3" aria-hidden />
+                </span>
+                <span>Red = Pending</span>
+              </span>
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              Click any icon to record or view follow-up notes
+            </span>
+          </div>
         </>
       )}
       {/* Delete sits under the list: tick leads above, then delete here. */}
