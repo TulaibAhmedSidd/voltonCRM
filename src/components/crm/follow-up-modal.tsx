@@ -55,7 +55,7 @@ export function FollowUpButtonModal({
           type="button"
           aria-label={`Follow-Up ${followUp.number}: ${isDone ? 'Completed' : 'Pending'}`}
           className={cn(
-            'inline-flex min-h-11 min-w-[4.8rem] items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
+            'inline-flex min-h-9 min-w-[4rem] items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-semibold transition-colors',
             isDone
               ? 'bg-tone-success-soft text-tone-success-soft-foreground ring-1 ring-tone-success/30 hover:bg-tone-success-soft/90'
               : 'bg-tone-danger-soft text-tone-danger-soft-foreground ring-1 ring-tone-danger/30 hover:bg-tone-danger-soft/90',
@@ -63,12 +63,12 @@ export function FollowUpButtonModal({
         >
           {isDone ? (
             <>
-              <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+              <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />
               <span>Done</span>
             </>
           ) : (
             <>
-              <Clock className="size-4 shrink-0" aria-hidden />
+              <Clock className="size-3.5 shrink-0" aria-hidden />
               <span>Pending</span>
             </>
           )}

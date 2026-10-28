@@ -1,7 +1,9 @@
+import React from 'react'
 import Link from 'next/link'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { EmptyState } from '@/components/common/states'
+import { TableScrollContainer } from '@/components/common/table-scroll-container'
 import { en } from '@/i18n/en'
 import { cn } from '@/lib/utils'
 
@@ -9,10 +11,10 @@ export type SortDirection = 'asc' | 'desc'
 
 export interface Column<T> {
   key: string
-  header: string
+  header: React.ReactNode
   cell: (row: T) => React.ReactNode
   sortable?: boolean
-  align?: 'start' | 'end'
+  align?: 'start' | 'end' | 'center'
   className?: string
 }
 
@@ -30,14 +32,15 @@ export interface DataTableProps<T> {
 }
 
 /**
- * Server-friendly table (no client JS). Sorting and paging are URL-driven so the database does the work.
- * On phones, pages usually render a LeadCard list instead and hide this table below `md`.
+ * Server-friendly table with interactive scroll enhancements.
+ * Wrapped in TableScrollContainer so users on desktop/laptop mice have a sticky top scrollbar,
+ * left/right quick scroll buttons, and click-and-drag horizontal panning.
  */
 export function DataTable<T>({ columns, rows, getRowKey, sort, sortHref, empty, caption, className }: DataTableProps<T>) {
   if (rows.length === 0) return <>{empty ?? <EmptyState />}</>
 
   return (
-    <div className={cn('overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10', className)}>
+    <TableScrollContainer className={className}>
       <Table>
         {caption ? <caption className="sr-only">{caption}</caption> : null}
         <TableHeader>
@@ -47,12 +50,21 @@ export function DataTable<T>({ columns, rows, getRowKey, sort, sortHref, empty, 
               const ariaSort = active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined
               const nextDirection: SortDirection = active && sort.direction === 'asc' ? 'desc' : 'asc'
               const Icon = !active ? ArrowUpDown : sort.direction === 'asc' ? ArrowUp : ArrowDown
+              const headerText = typeof column.header === 'string' ? column.header : undefined
               return (
-                <TableHead key={column.key} aria-sort={ariaSort} className={cn(column.align === 'end' && 'text-end', column.className)}>
+                <TableHead
+                  key={column.key}
+                  aria-sort={ariaSort}
+                  className={cn(
+                    column.align === 'end' && 'text-end',
+                    column.align === 'center' && 'text-center',
+                    column.className,
+                  )}
+                >
                   {column.sortable && sortHref ? (
                     <Link
                       href={sortHref(column.key, nextDirection)}
-                      aria-label={en.common.sortBy(column.header)}
+                      aria-label={headerText ? en.common.sortBy(headerText) : undefined}
                       className="inline-flex items-center gap-1 hover:text-foreground"
                     >
                       {column.header}
@@ -70,7 +82,14 @@ export function DataTable<T>({ columns, rows, getRowKey, sort, sortHref, empty, 
           {rows.map((row) => (
             <TableRow key={getRowKey(row)}>
               {columns.map((column) => (
-                <TableCell key={column.key} className={cn(column.align === 'end' && 'text-end tabular-nums', column.className)}>
+                <TableCell
+                  key={column.key}
+                  className={cn(
+                    column.align === 'end' && 'text-end tabular-nums',
+                    column.align === 'center' && 'text-center',
+                    column.className,
+                  )}
+                >
                   {column.cell(row)}
                 </TableCell>
               ))}
@@ -78,6 +97,6 @@ export function DataTable<T>({ columns, rows, getRowKey, sort, sortHref, empty, 
           ))}
         </TableBody>
       </Table>
-    </div>
+    </TableScrollContainer>
   )
 }

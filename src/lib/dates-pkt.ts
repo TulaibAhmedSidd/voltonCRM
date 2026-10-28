@@ -60,3 +60,8 @@ export function formatPktDateTime(date: Date): string {
   const p = pktParts(date)
   return `${p.day} ${en.dates.monthsShort[p.month - 1]}, ${formatPktTime(date)}`
 }
+/** Start of current PKT calendar day (00:00:00.000 PKT) as a UTC Date */
+export function startOfTodayPkt(now = new Date()): Date {
+  const p = pktParts(now)
+  return new Date(Date.UTC(p.year, p.month - 1, p.day, -5, 0, 0, 0))
+}

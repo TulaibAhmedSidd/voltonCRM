@@ -90,11 +90,11 @@ afterAll(async () => {
 })
 
 describe('1. Controlled Lead Assignment, Locking & Manager Approval', () => {
-  it('locks subsequent lead when agent has an earlier open lead with < 3 follow-ups', async () => {
+  it('locks subsequent lead of today when agent has an earlier open lead of today without follow-up 1', async () => {
     const leadB = await Lead.findById(leadBId).lean()
     expect(leadB).toBeTruthy()
 
-    // Agent has Lead A (0 follow-ups completed)
+    // Agent has Lead A of today (0 follow-ups completed)
     const locked = await isLeadLockedForAgent(agentUser.id, leadB!)
     expect(locked).toBe(true)
 
@@ -126,34 +126,29 @@ describe('1. Controlled Lead Assignment, Locking & Manager Approval', () => {
     expect(String(workLead._id)).toBe(leadBId)
   })
 
-  it('automatically unlocks subsequent leads once the active lead finishes all 3 follow-ups', async () => {
-    // Create Lead C
+  it('automatically unlocks subsequent leads once the active lead finishes follow-up 1', async () => {
+    // Create Lead C for today
     const rC = await ingestLead({ name: 'Customer Gamma', phone: '+923003333333', city: 'Islamabad', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
     leadCId = 'leadId' in rC ? rC.leadId : ''
-    await Lead.updateOne({ _id: leadCId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date() } })
+    await Lead.updateOne({ _id: leadCId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date(), receivedAt: new Date() } })
 
-    // Simulate completing all 3 follow-ups on Lead A
+    // Simulate completing Follow-Up 1 on Lead A
     await FollowUp.create([
       { leadId: leadAId, agentId: agentUser.id, dueAt: new Date(), number: 1, status: 'done', outcome: 'connected', completedAt: new Date() },
-      { leadId: leadAId, agentId: agentUser.id, dueAt: new Date(), number: 2, status: 'done', outcome: 'connected', completedAt: new Date() },
-      { leadId: leadAId, agentId: agentUser.id, dueAt: new Date(), number: 3, status: 'done', outcome: 'connected', completedAt: new Date() },
     ])
-    // Also mark Lead B as having 3 follow-ups
-    await FollowUp.create([
-      { leadId: leadBId, agentId: agentUser.id, dueAt: new Date(), number: 1, status: 'done', outcome: 'connected', completedAt: new Date() },
-      { leadId: leadBId, agentId: agentUser.id, dueAt: new Date(), number: 2, status: 'done', outcome: 'connected', completedAt: new Date() },
-      { leadId: leadBId, agentId: agentUser.id, dueAt: new Date(), number: 3, status: 'done', outcome: 'connected', completedAt: new Date() },
-    ])
+    await Lead.updateOne({ _id: leadAId }, { $set: { attemptCount: 1 } })
 
+    // Lead B was already unlocked by manager review in the previous test
     const leadC = await Lead.findById(leadCId).lean()
     const locked = await isLeadLockedForAgent(agentUser.id, leadC!)
     expect(locked).toBe(false)
   })
-  it('does not lock leads older than 24 hours even if active lead is incomplete', async () => {
+
+  it('does not lock past days leads (yesterday / previous calendar days) even if follow-ups are pending', async () => {
     const rOld = await ingestLead({ name: 'Customer Old', phone: '+923004444444', city: 'Multan', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
     const oldLeadId = 'leadId' in rOld ? rOld.leadId : ''
     const twoDaysAgo = new Date(Date.now() - 48 * 3600_000)
-    await Lead.updateOne({ _id: oldLeadId }, { $set: { receivedAt: twoDaysAgo, 'assignment.state': 'accepted', 'assignment.assignedAt': twoDaysAgo, unlockedForAgent: false } })
+    await Lead.updateOne({ _id: oldLeadId }, { $set: { receivedAt: twoDaysAgo, 'assignment.state': 'accepted', 'assignment.assignedAt': twoDaysAgo, unlockedForAgent: false, attemptCount: 0 } })
 
     const oldLead = await Lead.findById(oldLeadId).lean()
     const locked = await isLeadLockedForAgent(agentUser.id, oldLead!)
@@ -163,17 +158,23 @@ describe('1. Controlled Lead Assignment, Locking & Manager Approval', () => {
     expect(String(workOldLead._id)).toBe(oldLeadId)
   })
 
-  it('an incomplete lead older than 24 hours does not lock a newly received lead', async () => {
+  it('an incomplete lead from a previous calendar day does not lock newly received leads', async () => {
+    // Complete follow-up 1 on Lead C so only the previous-day lead (Customer Old) remains incomplete
+    await FollowUp.create([
+      { leadId: leadCId, agentId: agentUser.id, dueAt: new Date(), number: 1, status: 'done', outcome: 'connected', completedAt: new Date() },
+    ])
+    await Lead.updateOne({ _id: leadCId }, { $set: { attemptCount: 1 } })
+
     const rNew = await ingestLead({ name: 'Customer New', phone: '+923005555555', city: 'Peshawar', department: 'INSTALLATION', channel: 'manual', agentId: agentUser.id, quiet: true })
     const newLeadId = 'leadId' in rNew ? rNew.leadId : ''
-    await Lead.updateOne({ _id: newLeadId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date() } })
+    await Lead.updateOne({ _id: newLeadId }, { $set: { 'assignment.state': 'accepted', 'assignment.assignedAt': new Date(), receivedAt: new Date() } })
 
     const newLead = await Lead.findById(newLeadId).lean()
     const locked = await isLeadLockedForAgent(agentUser.id, newLead!)
     expect(locked).toBe(false)
   })
 
-  it('unlockAllPreviousLeads unlocks all leads older than 24 hours and clears unlockRequested', async () => {
+  it('unlockAllPreviousLeads unlocks all historical leads from previous calendar days and clears unlockRequested', async () => {
     const res = await unlockAllPreviousLeads()
     expect(res.modifiedCount).toBeGreaterThanOrEqual(1)
 

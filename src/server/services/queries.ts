@@ -2,7 +2,7 @@ import 'server-only'
 import { Types } from 'mongoose'
 import type { Department, KpiKey, LeadStatus, Role, Stage } from '@/domain/constants'
 import type { AssignableAgent, AttemptView, FollowUpView, KpiItem, LeadDetail, LeadSummary, MessageView, PendingTap, TeamMemberView } from '@/domain/view-models'
-import { pktDateKey, pktParts } from '@/lib/dates-pkt'
+import { pktDateKey, pktParts, startOfTodayPkt } from '@/lib/dates-pkt'
 import { pktMidnight, receivedRange, sourceCondition, type LeadFilters } from '@/domain/lead-filters'
 import { formatPkrCompact } from '@/lib/money'
 import { connectDb } from '@/server/db/connection'
@@ -75,9 +75,13 @@ async function lookups(leads: { _id?: unknown; contactId: unknown; departmentId?
           'assignment.state': 'accepted',
           status: 'open',
           unlockedForAgent: { $ne: true },
-          receivedAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+          receivedAt: { $gte: startOfTodayPkt() },
+          $or: [
+            { attemptCount: { $exists: false } },
+            { attemptCount: { $in: [0, null] } },
+          ],
         })
-          .sort({ 'assignment.assignedAt': 1 })
+          .sort({ 'assignment.assignedAt': 1, receivedAt: 1 })
           .select('_id')
           .lean()
       : Promise.resolve(null),
@@ -147,7 +151,8 @@ function toSummary(lead: unknown, maps: Awaited<ReturnType<typeof lookups>>, use
       user.role === 'agent' &&
       l.status === 'open' &&
       !l.unlockedForAgent &&
-      (l.receivedAt ? new Date(l.receivedAt).getTime() >= Date.now() - 24 * 60 * 60 * 1000 : false) &&
+      (l.receivedAt ? new Date(l.receivedAt).getTime() >= startOfTodayPkt().getTime() : false) &&
+      !((l.attemptCount ?? 0) >= 1 || maps.followUps?.get(String(l._id))?.some((f) => f.number === 1 && f.status === 'done')) &&
       maps.earliestActiveLeadId !== null &&
       maps.earliestActiveLeadId !== String(l._id),
     unlockRequested: !!l.unlockRequested,

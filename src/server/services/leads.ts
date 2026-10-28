@@ -5,6 +5,7 @@ import type { SessionUser } from '@/server/auth/session'
 import { loadLeadFor } from '@/server/auth/guards'
 import { drainQueue, manualAssign, resetAssignment, startAssignment } from '@/server/services/assignment'
 import { cancelJobs, isDuplicateKey, logActivity, notify, oid, UserError } from '@/server/services/common'
+import { startOfTodayPkt } from '@/lib/dates-pkt'
 
 const STAGE_ORDER: Stage[] = ['new', 'contacted', 'interested', 'requirement_collected', 'site_survey', 'quotation_pending', 'quotation_sent', 'negotiation', 'won', 'lost']
 /** Stages an agent may set by hand (forward only). Won / lost come from the call result and need a manager's OK. */
@@ -168,67 +169,82 @@ export async function isLeadLockedForAgent(
     unlockedForAgent?: boolean
     assignment?: { assignedAt?: Date | null; state?: string } | null
     receivedAt?: Date | string | null
+    attemptCount?: number | null
   },
 ): Promise<boolean> {
   if (lead.status !== 'open' || lead.unlockedForAgent) return false
 
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000
-  const oneDayAgo = new Date(Date.now() - ONE_DAY_MS)
+  const todayStart = startOfTodayPkt()
 
   let receivedAtDate = lead.receivedAt ? new Date(lead.receivedAt) : null
   let assignedAtDate = lead.assignment?.assignedAt ? new Date(lead.assignment.assignedAt) : null
 
   // If receivedAt or assignedAt was not supplied on a partial lead object, lookup from DB
   if (!receivedAtDate || !assignedAtDate) {
-    const fullLead = await Lead.findById(lead._id).select('receivedAt assignment.assignedAt').lean()
+    const fullLead = await Lead.findById(lead._id).select('receivedAt assignment.assignedAt attemptCount').lean()
     if (fullLead) {
       if (!receivedAtDate && fullLead.receivedAt) receivedAtDate = new Date(fullLead.receivedAt)
       if (!assignedAtDate && fullLead.assignment?.assignedAt) assignedAtDate = new Date(fullLead.assignment.assignedAt)
+      if (lead.attemptCount === undefined && fullLead.attemptCount !== undefined) {
+        lead.attemptCount = fullLead.attemptCount
+      }
     }
   }
 
-  // Leads older than 24 hours are never locked
-  if (receivedAtDate && !isNaN(receivedAtDate.getTime()) && receivedAtDate.getTime() < oneDayAgo.getTime()) {
+  // Leads from prior calendar days (received before today in PKT) are NEVER locked
+  if (receivedAtDate && !isNaN(receivedAtDate.getTime()) && receivedAtDate.getTime() < todayStart.getTime()) {
     return false
   }
-  if (assignedAtDate && !isNaN(assignedAtDate.getTime()) && assignedAtDate.getTime() < oneDayAgo.getTime()) {
+  if (assignedAtDate && !isNaN(assignedAtDate.getTime()) && assignedAtDate.getTime() < todayStart.getTime()) {
+    return false
+  }
+
+  // If this lead itself already completed Follow-up 1 (attemptCount >= 1), it is never locked
+  if (lead.attemptCount !== undefined && lead.attemptCount !== null && lead.attemptCount >= 1) {
     return false
   }
 
   if (!assignedAtDate) return false
 
-  // Look for an earlier incomplete lead assigned to this agent THAT IS ALSO A NEW LEAD (received within 24h)
+  // Look for an earlier lead assigned to this agent received TODAY in PKT that hasn't completed Follow-up 1
   const earlierIncompleteLead = await Lead.findOne({
     _id: { $ne: lead._id },
     'assignment.agentId': oid(agentId),
     'assignment.state': 'accepted',
     status: 'open',
-    'assignment.assignedAt': { $lt: assignedAtDate, $gte: oneDayAgo },
-    receivedAt: { $gte: oneDayAgo },
+    'assignment.assignedAt': { $lt: assignedAtDate, $gte: todayStart },
+    receivedAt: { $gte: todayStart },
     unlockedForAgent: { $ne: true },
+    $or: [
+      { attemptCount: { $exists: false } },
+      { attemptCount: { $in: [0, null] } },
+    ],
   }).select('_id attemptCount').lean()
 
   if (!earlierIncompleteLead) return false
 
-  const completedFollowUps = await FollowUp.countDocuments({
+  // Check if follow-up 1 was recorded in FollowUp collection for that earlier lead
+  const followUp1Done = await FollowUp.countDocuments({
     leadId: earlierIncompleteLead._id,
+    number: 1,
     status: 'done',
   })
 
-  return completedFollowUps < 3
+  // If Follow-up 1 is done, it does not lock subsequent leads
+  return followUp1Done < 1
 }
 
 /**
- * Unlocks all historical/previous leads older than 24 hours so agents can work freely.
+ * Unlocks all historical/previous leads from prior calendar days so agents can work freely.
  * Also clears any pending unlockRequested flags so no approval notifications bother managers.
  */
 export async function unlockAllPreviousLeads(): Promise<{ modifiedCount: number }> {
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+  const todayStart = startOfTodayPkt()
   const res = await Lead.updateMany(
     {
       $or: [
-        { receivedAt: { $lt: oneDayAgo } },
-        { 'assignment.assignedAt': { $lt: oneDayAgo } },
+        { receivedAt: { $lt: todayStart } },
+        { 'assignment.assignedAt': { $lt: todayStart } },
         { unlockRequested: true },
       ],
     },

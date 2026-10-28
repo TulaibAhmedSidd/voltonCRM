@@ -142,7 +142,14 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     },
     {
       key: 'followup1',
-      header: 'Follow-Up 1',
+      header: (
+        <div className="flex flex-col items-center justify-center leading-none gap-0.5">
+          <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Follow-up</span>
+          <span className="text-xs font-bold text-foreground">1</span>
+        </div>
+      ),
+      align: 'center',
+      className: 'w-[80px] min-w-[76px] px-1 text-center',
       cell: (l) => {
         const fu = l.followUps?.find((f) => f.number === 1) ?? { number: 1, status: 'pending' as const }
         return (
@@ -159,7 +166,14 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     },
     {
       key: 'followup2',
-      header: 'Follow-Up 2',
+      header: (
+        <div className="flex flex-col items-center justify-center leading-none gap-0.5">
+          <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Follow-up</span>
+          <span className="text-xs font-bold text-foreground">2</span>
+        </div>
+      ),
+      align: 'center',
+      className: 'w-[80px] min-w-[76px] px-1 text-center',
       cell: (l) => {
         const fu = l.followUps?.find((f) => f.number === 2) ?? { number: 2, status: 'pending' as const }
         return (
@@ -177,7 +191,14 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
     },
     {
       key: 'followup3',
-      header: 'Follow-Up 3',
+      header: (
+        <div className="flex flex-col items-center justify-center leading-none gap-0.5">
+          <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Follow-up</span>
+          <span className="text-xs font-bold text-foreground">3</span>
+        </div>
+      ),
+      align: 'center',
+      className: 'w-[80px] min-w-[76px] px-1 text-center',
       cell: (l) => {
         const fu = l.followUps?.find((f) => f.number === 3) ?? { number: 3, status: 'pending' as const }
         return (
@@ -193,6 +214,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         )
       },
     },
+    
     {
       key: 'junkAction',
       header: '',
