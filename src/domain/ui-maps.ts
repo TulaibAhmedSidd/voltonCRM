@@ -223,6 +223,7 @@ export const ACTIVITY_TYPE_META: MetaMap<C.ActivityType> = {
   visit_assigned: { label: en.activityType.visit_assigned, tone: 'installation', icon: MapPin },
   visit_updated: { label: en.activityType.visit_updated, tone: 'installation', icon: MapPin },
   quotation_issued: { label: en.activityType.quotation_issued, tone: 'brand', icon: FileImage },
+  quotation_to_manager: { label: en.activityType.quotation_to_manager, tone: 'info', icon: FileImage },
 }
 
 export const VISIT_STATUS_META: MetaMap<C.VisitStatus> = {

@@ -85,6 +85,9 @@ function describe(type: string, d: Record<string, unknown>, actor?: string): str
   if (type === 'quotation_issued') {
     return `Quotation issued${d.text ? `: ${d.text}` : ''}`
   }
+  if (type === 'quotation_to_manager') {
+    return `Quotation ${d.quotationNo ?? ''} sent to ${d.managerName ?? 'the manager'} for approval`
+  }
   if (type === 'visit_assigned') {
     return `Site visit assigned${d.kw ? ` (${d.kw} kW)` : ''}`
   }

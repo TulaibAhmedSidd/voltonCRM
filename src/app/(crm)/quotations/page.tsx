@@ -8,6 +8,7 @@ import { NewQuotationDialog } from '@/components/crm/new-quotation-dialog'
 import { websiteCatalog } from '@/server/services/website'
 import { QuotationStatusSelect } from '@/components/crm/quotation-status-select'
 import { QuotationWhatsAppButton } from '@/components/crm/quotation-whatsapp-button'
+import { QuotationManagerButton } from '@/components/crm/quotation-manager-button'
 import { requireUser } from '@/server/auth/session'
 import { listCentralQuotations } from '@/server/services/quotations'
 import { listLeads } from '@/server/services/queries'
@@ -223,6 +224,7 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
                               </Button>
 
                               {digits && <QuotationWhatsAppButton quotationId={row.id} phone={row.customer.phone} variant="icon" />}
+                              <QuotationManagerButton quotationId={row.id} variant="icon" />
                             </div>
                           </td>
                         </tr>
@@ -289,6 +291,7 @@ export default async function QuotationsPage(props: PageProps<'/quotations'>) {
                           </a>
                         </Button>
                         {digits && <QuotationWhatsAppButton quotationId={row.id} phone={row.customer.phone} variant="compact" />}
+                        <QuotationManagerButton quotationId={row.id} variant="compact" />
                       </div>
                     </div>
                   )

@@ -22,6 +22,7 @@ import {
 import type { CatalogItem, WebsiteCatalog } from '@/domain/website'
 import { createQuotationAction, createStandaloneQuotationAction, sendQuotationWhatsAppAction } from '@/server/actions'
 import { QuotationWhatsAppButton } from '@/components/crm/quotation-whatsapp-button'
+import { QuotationManagerButton } from '@/components/crm/quotation-manager-button'
 import { defaultQuotation } from '@/domain/quotation'
 import { cn } from '@/lib/utils'
 import { NumberInput } from '@/components/common/number-input'
@@ -98,6 +99,7 @@ function PdfButtons({ id, no, total, customer, onShare }: { id: string; no: stri
           Share from phone
         </Button>
         <QuotationWhatsAppButton quotationId={id} phone={customer.phone} />
+        <QuotationManagerButton quotationId={id} />
       </div>
       {sent?.message ? <p className={cn('rounded-lg px-3 py-2 text-xs', sent.ok ? 'bg-tone-success-soft text-tone-success-soft-foreground' : 'bg-tone-warning-soft text-tone-warning-soft-foreground')}>{sent.message}</p> : null}
     </div>

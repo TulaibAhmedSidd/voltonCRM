@@ -42,6 +42,7 @@ import { eraseCustomer } from '@/server/services/erasure'
 import { createInstruction, createJobRole, deleteJobRole, resolveJobRole, updateInstruction } from '@/server/services/work'
 import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
 import { quotationInput, formatRs } from '@/domain/quotation'
+import { managerFor } from '@/server/services/manager-contact'
 import { WEBSITE_ACCESS, WEBSITE_ACCESS_LABEL, websiteAccessEditable } from '@/domain/website'
 import { removePushSubscription, savePushSubscription, sendPush } from '@/server/services/push'
 import { isHexColor, THEME_PRESETS } from '@/styles/runtime-theme'
@@ -1007,13 +1008,17 @@ export async function createQuotationAction(input: { leadId: string; quotation: 
 
 /** Send a saved quotation PDF to the customer on WhatsApp (from the CRM, within Meta's 24-hour window). */
 /** Customer link to the quotation PDF (30 days, no sign-in) — put in the WhatsApp message instead of attaching a file. */
-async function quotationLink(quotationId: string): Promise<string> {
-  const secret = getServerEnv().AUTH_SECRET
-  if (!secret) throw new UserError('AUTH_SECRET is not set')
+async function requestOrigin(): Promise<string> {
   const h = await headers()
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'volton-crm.vercel.app'
   const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
-  return `${proto}://${host}/api/quotations/share/${makeQuoteToken(quotationId, secret)}`
+  return `${proto}://${host}`
+}
+
+async function quotationLink(quotationId: string): Promise<string> {
+  const secret = getServerEnv().AUTH_SECRET
+  if (!secret) throw new UserError('AUTH_SECRET is not set')
+  return `${await requestOrigin()}/api/quotations/share/${makeQuoteToken(quotationId, secret)}`
 }
 
 /** "Open customer's WhatsApp": the ready message with the quotation link (nothing to attach). */
@@ -1025,6 +1030,40 @@ export async function quotationShareAction(quotationId: string): Promise<{ ok: b
     const link = await quotationLink(String(q._id))
     const text = `Assalam o Alaikum ${q.customer.name}, here is your Volton Solar quotation ${q.quotationNo} (Rs ${formatRs(q.total)}).\n\nOpen the PDF: ${link}\n\n— ${q.preparedBy.name}, Volton Solar`
     return { ok: true, link, text }
+  } catch (error) {
+    return errorState(error) as { ok: boolean; message?: string }
+  }
+}
+
+/** "Send to manager": the manager's WhatsApp number and a ready message with the PDF link, asking for approval. Also alerts the manager in the CRM. */
+export async function quotationToManagerAction(quotationId: string): Promise<{ ok: boolean; message?: string; phone?: string; text?: string }> {
+  const user = await requireUser()
+  try {
+    const q = typeof quotationId === 'string' ? await getQuotationFor(user, quotationId) : null
+    if (!q) return { ok: false, message: 'Quotation not found' }
+    const manager = await managerFor(user.id)
+    if (!manager) return { ok: false, message: 'No manager is set for you. Ask an admin to set one on the Team page.' }
+    if (!manager.phone) return { ok: false, message: `${manager.name} has no WhatsApp number in the CRM yet. Ask an admin to add it to their account.` }
+    const link = await quotationLink(String(q._id))
+    const leadUrl = q.leadId ? `${await requestOrigin()}/leads/${q.leadId}` : null
+    const text = [
+      `Assalam o Alaikum ${manager.name}, please check and approve quotation ${q.quotationNo} for ${q.customer.name}${q.leadNo ? ` (lead ${q.leadNo})` : ''}: Rs ${formatRs(q.total)}.`,
+      '',
+      `PDF: ${link}`,
+      ...(leadUrl ? [`Lead: ${leadUrl}`] : []),
+      '',
+      `— ${user.name}`,
+    ].join('\n')
+    await notify({
+      userIds: [manager.id],
+      type: 'quotation_approval',
+      title: `Approve quotation ${q.quotationNo}`,
+      body: `${q.customer.name} · Rs ${formatRs(q.total)} · from ${user.name}`,
+      link: q.leadId ? `/leads/${q.leadId}` : '/quotations',
+      dedupeKey: `quotation_approval:${q._id}:${Date.now()}`,
+    })
+    if (q.leadId) await logActivity(q.leadId, 'quotation_to_manager', user.id, { quotationNo: q.quotationNo, managerName: manager.name })
+    return { ok: true, phone: manager.phone, text }
   } catch (error) {
     return errorState(error) as { ok: boolean; message?: string }
   }

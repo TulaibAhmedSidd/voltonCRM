@@ -186,6 +186,7 @@ export const ACTIVITY_TYPES = [
   'visit_assigned',
   'visit_updated',
   'quotation_issued',
+  'quotation_to_manager',
 ] as const
 export type ActivityType = (typeof ACTIVITY_TYPES)[number]
 
@@ -219,6 +220,8 @@ export const NOTIFICATION_TYPES = [
   /** Work instruction given / updated (Instructions tab). */
   'instruction',
   'lead_unlock_request',
+  /** An employee sent a quotation to their manager for approval. */
+  'quotation_approval',
 ] as const
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number]
 

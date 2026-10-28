@@ -137,6 +137,7 @@ export const en = {
     visit_assigned: 'Site visit assigned',
     visit_updated: 'Site visit updated',
     quotation_issued: 'Quotation issued',
+    quotation_to_manager: 'Quotation sent to manager',
   },
   notificationType: {
     new_lead: 'New lead',
@@ -159,6 +160,7 @@ export const en = {
     manager_ping: 'Message from your manager',
     instruction: 'Work instruction',
     lead_unlock_request: 'Lead unlock request',
+    quotation_approval: 'Quotation to approve',
   },
   quotationStatus: { draft: 'Draft', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected' },
   agentActivity: {
