@@ -11,6 +11,7 @@ export const REQUIRED_DOCS = [
   'docs/ai/schema.md',
   'docs/ai/integrations.md',
   'docs/ai/workflow.md',
+  'docs/ai/coding-standards.md',
 ]
 
 export function parseFrontmatter(text) {

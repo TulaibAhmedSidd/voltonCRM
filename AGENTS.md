@@ -26,6 +26,7 @@ Volt On Solar CRM — a mobile-first web app for a Pakistani solar company with 
 | Folders, server/client boundaries, data flow | `docs/ai/architecture.md` |
 | Google Sheet, WhatsApp, cron, file storage, auth, PWA | `docs/ai/integrations.md` |
 | How to work, test, commit, log progress | `docs/ai/workflow.md` |
+| Any code: performance (queries, payloads, caching, polling) and our coding standard | `docs/ai/coding-standards.md` |
 
 ## 3. Session start and end
 - **Start:** read this file, then the newest `progress/<date>/next.md` and `remaining.md`. Always take a fresh copy of the production DB into dev (`MONGODB_URI_NEW_DEV`) before testing, running scratch scripts, or doing development work. Never touch `MONGODB_URI` directly during dev.
@@ -75,6 +76,13 @@ Phase 1 costs $0: Vercel Hobby, Atlas M0 (512 MB), Cloudinary free plan (private
 - Auth is our own (no auth library): scrypt password hashes, sessions in Mongo (`sessions`, token hash only) behind the httpOnly `volton_session` cookie. First admin via `/setup` + `MASTER_KEY`.
 - The service worker (`public/sw.js`) caches only static files — never pages, API responses or customer data. Bump its `VERSION` when you change it.
 - Secrets only in env vars; never commit `.env*` except `.env.example`. Never log phone numbers, CNICs or message text.
+
+## 9a. Performance and coding standard
+Details: `docs/ai/coding-standards.md` · always-on rule: `.agents/rules/coding-standards.md`.
+- Reads: `.lean()` + `.select()` + `.limit()`; every list filter/sort is indexed; no query inside a loop (one `$in` query + `Map`); independent awaits in `Promise.all`; atomic `updateOne` / upsert instead of find → save.
+- Lists send display fields only — big data (quotation `input`, lead `extra`) loads when a row is opened. Server Components by default; polling only via `AutoRefresh`.
+- Side effects after the response (`after()`) or the commit; per-user routes use `force-dynamic` + `Cache-Control: private, no-store`; no `'use cache'` (cacheComponents is off).
+- TypeScript strict (no `any` / `@ts-ignore`), Zod at boundaries, kebab-case files, Server Actions end in `Action`, one plain-English JSDoc line per export, match the file's style and line endings.
 
 ## 10. Testing and "done"
 - Build a phase first; write/run tests when the phase is complete (`tests/unit`, DB tests in `tests/db` on MongoMemoryReplSet).
