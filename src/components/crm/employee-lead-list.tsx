@@ -53,6 +53,7 @@ export function EmployeeLeadList({ people, hrefFor }: { people: EmployeeLeadStat
         <li key={p.id}>
           <Link
             href={hrefFor(p.id)}
+            prefetch={false}
             className="group flex h-full flex-col gap-3 rounded-2xl bg-card p-4 text-card-foreground shadow-sm ring-1 ring-foreground/10 transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-ring"
           >
             <span className="flex items-start justify-between gap-3">

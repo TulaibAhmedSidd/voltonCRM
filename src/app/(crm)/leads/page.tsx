@@ -12,6 +12,7 @@ import { LeadBulkActions, LeadSelectBox } from '@/components/crm/lead-bulk-actio
 import { AssignmentBadge, SourceBadge } from '@/components/crm/badges'
 
 import { QuickAddLead } from '@/components/crm/quick-add-lead'
+import { RefreshLeadsButton } from '@/components/crm/refresh-leads-button'
 import { AssignLeadDialog } from '@/components/crm/assign-lead-dialog'
 import { ActionForm } from '@/components/common/action-form'
 import { pullSheetAction, revertJunkAction } from '@/server/actions'
@@ -99,6 +100,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
           <div className="flex flex-wrap items-center gap-1.5">
             <Link
               href={`/leads/${l.id}?returnTo=${encodeURIComponent(currentSearchPath)}`}
+              prefetch={false}
               className="font-medium underline-offset-4 hover:underline"
             >
               {l.name}
@@ -276,6 +278,7 @@ export default async function LeadsPage(props: PageProps<'/leads'>) {
         actions={
           person ? undefined : (
             <div className="flex flex-wrap items-start gap-2">
+              <RefreshLeadsButton />
               {user.role === 'manager' || user.role === 'admin' || user.role === 'super_admin' ? (
                 <ActionForm action={pullSheetAction} className="space-y-2">
                   <input type="hidden" name="mode" value="live" />

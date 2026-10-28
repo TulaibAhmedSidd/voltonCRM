@@ -80,6 +80,7 @@ export function AppShell({ role, userName, websiteAdmin, actions, children }: Ap
               <Link
                 key={item.href}
                 href={item.href}
+      prefetch={false}
                 aria-current={active ? 'page' : undefined}
                 className={cn('flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium', active ? 'text-foreground' : 'text-muted-foreground')}
               >
@@ -99,6 +100,7 @@ function SideLink({ item, active }: { item: NavItem; active: boolean }) {
   return (
     <Link
       href={item.href}
+      prefetch={false}
       aria-current={active ? 'page' : undefined}
       className={cn(
         'flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
@@ -125,10 +127,10 @@ function UserBlock({ role, userName, websiteAdmin, className }: { role: Role; us
           Website admin
         </a>
       ) : null}
-      <Link href="/change-password" className="flex min-h-11 items-center text-sidebar-foreground/80 underline-offset-4 hover:underline">
+      <Link href="/change-password" prefetch={false} className="flex min-h-11 items-center text-sidebar-foreground/80 underline-offset-4 hover:underline">
         Change password
       </Link>
-      <Link href="/privacy" className="flex min-h-11 items-center text-xs text-sidebar-foreground/60 underline-offset-4 hover:underline">
+      <Link href="/privacy" prefetch={false} className="flex min-h-11 items-center text-xs text-sidebar-foreground/60 underline-offset-4 hover:underline">
         Privacy policy
       </Link>
     </div>

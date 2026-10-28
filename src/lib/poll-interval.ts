@@ -3,16 +3,14 @@
 import { useCallback, useSyncExternalStore } from 'react'
 
 export const POLL_INTERVAL_OPTIONS = [
-  { label: '15 seconds', value: 15 },
-  { label: '30 seconds (default)', value: 30 },
+  { label: 'Manual only (default)', value: 0 },
   { label: '1 minute', value: 60 },
   { label: '2 minutes', value: 120 },
   { label: '5 minutes', value: 300 },
   { label: '10 minutes', value: 600 },
-  { label: 'Manual only (off)', value: 0 },
 ] as const
 
-export const DEFAULT_POLL_INTERVAL_SEC = 30
+export const DEFAULT_POLL_INTERVAL_SEC = 0
 const STORAGE_KEY = 'crm_poll_interval_sec'
 const EVENT_NAME = 'crm-poll-interval-change'
 
@@ -22,6 +20,11 @@ export function getSavedPollIntervalSec(): number {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw !== null) {
       const parsed = parseInt(raw, 10)
+      // Reset old aggressive defaults (15s, 30s) to manual to protect serverless quotas
+      if (parsed === 15 || parsed === 30) {
+        localStorage.setItem(STORAGE_KEY, '0')
+        return 0
+      }
       if (!isNaN(parsed) && parsed >= 0) return parsed
     }
   } catch {

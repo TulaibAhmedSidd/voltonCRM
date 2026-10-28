@@ -48,7 +48,7 @@ export function LeadCard({ lead, href, showAgent = true, className }: { lead: Le
 
   const classes = cn('flex flex-col gap-2.5 rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10', href && 'transition-colors hover:bg-muted/50', className)
   return href ? (
-    <Link href={href} className={classes}>
+    <Link href={href} prefetch={false} className={classes}>
       {body}
     </Link>
   ) : (

@@ -22,7 +22,7 @@ export function FollowUpItem({ followUp, href }: { followUp: FollowUpView; href?
   )
   const classes = cn('flex min-h-14 items-center justify-between gap-3 rounded-lg px-3 py-2', href && 'hover:bg-muted', followUp.isOverdue && 'bg-tone-danger-soft/40')
   return href ? (
-    <Link href={href} className={classes}>
+    <Link href={href} prefetch={false} className={classes}>
       {content}
     </Link>
   ) : (

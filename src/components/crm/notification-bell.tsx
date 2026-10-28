@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
-import { Bell, BellOff, BellRing, X } from 'lucide-react'
+import { Bell, BellOff, BellRing, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { formatPktDateTime } from '@/lib/dates-pkt'
@@ -30,7 +30,7 @@ interface Toast {
 const TOAST_MS = 8000
 
 /**
- * The bell: unread alerts (checked according to configured interval while the screen is visible, and at once when a push arrives),
+ * The bell: unread alerts (checked on mount and on opening the bell, or when a push arrives),
  * a pop-up toast for every NEW alert, and the switch for phone / PC notifications (Web Push).
  */
 export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
@@ -65,12 +65,13 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
     const start = () => {
       if (id || document.visibilityState !== 'visible') return
       void load()
+      // Only set recurring timer if the user explicitly enabled a non-zero interval
       if (intervalMs > 0) {
         id = setInterval(load, intervalMs)
       }
     }
     const stop = () => {
-      clearInterval(id)
+      if (id) clearInterval(id)
       id = undefined
     }
     const onVisibility = () => (document.visibilityState === 'visible' ? start() : stop())
@@ -109,7 +110,7 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
 
   return (
     <>
-      <Popover>
+      <Popover onOpenChange={(open) => { if (open) void load() }}>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="icon-touch" aria-label={`Notifications (${data.unread} unread)`} className="relative">
             <Bell />
@@ -122,7 +123,18 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
         </PopoverTrigger>
         <PopoverContent align="end" className="w-80 p-0">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
-            <span className="text-sm font-semibold">Notifications</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold">Notifications</span>
+              <button
+                type="button"
+                onClick={() => void load()}
+                aria-label="Refresh notifications"
+                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Refresh notifications"
+              >
+                <RefreshCw className="size-3.5" aria-hidden />
+              </button>
+            </div>
             <form
               action={async () => {
                 await markNotificationsReadAction()
@@ -153,7 +165,7 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
             {data.items.length === 0 ? <li className="px-3 py-6 text-center text-sm text-muted-foreground">No notifications</li> : null}
             {data.items.map((n) => (
               <li key={n.id} className={cn('border-b border-border last:border-0', !n.read && 'bg-tone-brand-soft/50')}>
-                <Link href={n.link ?? '#'} className="block px-3 py-2 hover:bg-muted">
+                <Link href={n.link ?? '#'} prefetch={false} className="block px-3 py-2 hover:bg-muted">
                   <p className="text-sm font-medium">{n.title}</p>
                   {n.body ? <p className="text-xs text-muted-foreground">{n.body}</p> : null}
                   <p className="text-[11px] text-muted-foreground">{formatPktDateTime(new Date(n.at))}</p>
@@ -172,7 +184,7 @@ export function NotificationBell({ pushKey }: { pushKey?: string | null }) {
               {toasts.map((t) => (
                 <div key={t.id} role="alert" className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl bg-card p-3 text-card-foreground shadow-xl ring-1 ring-foreground/15">
                   <BellRing className="mt-0.5 size-5 shrink-0 text-tone-brand" aria-hidden />
-                  <Link href={t.link ?? '/dashboard'} className="min-w-0 flex-1" onClick={() => close(t.id)}>
+                  <Link href={t.link ?? '/dashboard'} prefetch={false} className="min-w-0 flex-1" onClick={() => close(t.id)}>
                     <p className="text-sm font-semibold">{t.title}</p>
                     {t.body ? <p className="text-xs text-muted-foreground">{t.body}</p> : null}
                   </Link>
