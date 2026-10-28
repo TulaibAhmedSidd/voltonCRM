@@ -16,6 +16,7 @@ export function LeadHeader({ lead, actions }: { lead: LeadDetail; actions?: Reac
     [en.lead.form, lead.formName],
     [en.lead.adHeadline, lead.ctwaHeadline],
     [en.lead.otherNumbers, lead.altPhones.length ? lead.altPhones.map(show).join(', ') : undefined],
+    ...lead.addresses.map((a): [string, string] => [a.label, a.value]),
   ]
 
   return (
@@ -26,7 +27,7 @@ export function LeadHeader({ lead, actions }: { lead: LeadDetail; actions?: Reac
           <h1 className="font-heading text-xl font-semibold md:text-2xl">{lead.name}</h1>
           <p className="text-muted-foreground tabular-nums">
             {show(lead.phone)}
-            {lead.city ? ` · ${lead.city}${lead.area ? `, ${lead.area}` : ''}` : ''}
+            {lead.city || lead.area ? ` · ${[lead.city, lead.area].filter(Boolean).join(', ')}` : ''}
           </p>
         </div>
         {lead.sla ? <SlaTimer startedAt={lead.sla.startedAt} deadline={lead.sla.deadline} size="md" /> : null}

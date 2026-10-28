@@ -29,7 +29,7 @@ const EXACT: Record<SheetLeadField, string[]> = {
   email: ['email', 'emailaddress', 'mail'],
   city: ['city', 'location', 'citylocation', 'yourcity'],
   area: ['area', 'town', 'sector', 'society', 'locality'],
-  address: ['address', 'streetaddress', 'fulladdress', 'siteaddress'],
+  address: ['address', 'streetaddress', 'fulladdress', 'siteaddress', 'residentialaddress', 'currentaddress', 'homeaddress', 'houseaddress', 'completeaddress', 'youraddress', 'installationaddress', 'permanentaddress', 'postaladdress'],
   department: ['department', 'dept', 'leadtype', 'category', 'service', 'interest'],
   campaignId: ['campaignid'],
   campaignName: ['campaignname', 'campaign'],
@@ -53,8 +53,8 @@ const EXACT: Record<SheetLeadField, string[]> = {
   installTimeline: ['installtimeline', 'installtimelineform', 'whendoyouplantoinstallthesolarsystem'],
 }
 
-/** Fallback for long Meta form questions: header contains ALL words of one rule. Checked in order. */
-const CONTAINS: [SheetLeadField, string[]][] = [
+/** Fallback for long Meta form questions: header contains ALL words of one rule (and none of the "not" words). Checked in order. */
+const CONTAINS: [SheetLeadField, string[], string[]?][] = [
   ['systemSizeRange', ['size', 'solar']],
   ['installLocation', ['where', 'install']],
   ['installTimeline', ['when', 'install']],
@@ -67,6 +67,7 @@ const CONTAINS: [SheetLeadField, string[]][] = [
   ['phone', ['mobile']],
   ['city', ['city']],
   ['email', ['email']],
+  ['address', ['address'], ['email', 'e-mail']],
   ['propertyType', ['property']],
   ['name', ['name']],
 ]
@@ -138,7 +139,7 @@ export function detectColumns(headers: string[], overrides: Record<string, Heade
   }
   for (const header of pending) {
     const words = header.toLowerCase()
-    const rule = CONTAINS.find(([field, parts]) => !taken.has(field) && parts.every((p) => words.includes(p)))
+    const rule = CONTAINS.find(([field, parts, not = []]) => !taken.has(field) && parts.every((p) => words.includes(p)) && !not.some((n) => words.includes(n)))
     if (rule) {
       mapping[header] = rule[0]
       taken.add(rule[0])
@@ -263,11 +264,30 @@ export const SHEET_COLUMN_GUIDE: { field: string; required: boolean; examples: s
   { field: 'Customer name', required: false, examples: ['full_name', 'name', 'customer name'] },
   { field: 'Date the lead came', required: false, examples: ['created_time', 'date', 'timestamp (or a date in column A)'] },
   { field: 'Campaign / form', required: false, examples: ['campaign_name', 'campaign name', 'form_name', 'ad_name'] },
-  { field: 'City / area / address', required: false, examples: ['city', 'area', 'address'] },
+  { field: 'City / area / address', required: false, examples: ['city', 'area', 'address', 'residential address', 'current address'] },
   { field: 'Email', required: false, examples: ['email'] },
   { field: 'Notes / remarks', required: false, examples: ['remark', 'notes', 'comments'] },
   { field: 'Meta form questions', required: false, examples: ['what size solar system…', 'where do you want to install…', 'when do you plan to install…'] },
 ]
+
+/**
+ * Address columns kept in lead.extra — a second one ("Current Address" next to "Residential Address") or one on an old
+ * lead imported before the column was recognised. [header, value]; e-mail columns are left out.
+ */
+export function addressColumns(extra: Record<string, unknown> | null | undefined): [string, string][] {
+  return Object.entries(extra ?? {})
+    .filter(([k, v]) => /address/i.test(k) && !/e-?mail/i.test(k) && v !== null && v !== undefined && String(v).trim() !== '')
+    .map(([k, v]) => [k, String(v).trim()])
+}
+
+/** Saved address first, then other address columns from the Sheet / form (same text shown once). */
+export function leadAddresses(saved: string | null | undefined, extra: Record<string, unknown> | null | undefined): { label: string; value: string }[] {
+  const out: { label: string; value: string }[] = saved?.trim() ? [{ label: 'Address', value: saved.trim() }] : []
+  for (const [label, value] of addressColumns(extra)) {
+    if (!out.some((a) => a.value.toLowerCase() === value.toLowerCase())) out.push({ label: out.length ? label : 'Address', value })
+  }
+  return out
+}
 
 /** Map a Meta form answer to our enum (tolerant of typos like "within_a_monthwithin_7_to_15_days"). */
 export function parseFormAnswer<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {

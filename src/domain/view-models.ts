@@ -70,6 +70,8 @@ export interface LeadDetail extends LeadSummary {
   altPhones: string[]
   city?: string
   area?: string
+  /** Customer addresses: the saved one first ("Address"), then any other address column the Sheet / form sent, by its own name. */
+  addresses: { label: string; value: string }[]
   campaignName?: string
   adName?: string
   formName?: string

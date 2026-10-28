@@ -211,7 +211,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
             initial={lastQuote ?? defaultQuotation(typeof site.targetKw === 'number' ? site.targetKw : null)}
             quotations={quotations}
             canCreate={canQuote}
-            customer={{ name: lead.name, phone: lead.phone }}
+            customer={{ name: lead.name, phone: lead.phone, address: [lead.addresses[0]?.value, lead.area, lead.city].filter(Boolean).join(', ') }}
             catalog={catalog}
           />
         </>,
@@ -422,7 +422,7 @@ export default async function LeadPage(props: PageProps<'/leads/[id]'>) {
                 <input type="hidden" name="leadId" value={lead.id} />
                 <input type="hidden" name="customerName" value={lead.name} />
                 <input type="hidden" name="phone" value={lead.phone} />
-                <TextField label="Address" name="address" required defaultValue={[lead.area, lead.city].filter(Boolean).join(', ')} />
+                <TextField label="Address" name="address" required defaultValue={[lead.addresses[0]?.value, lead.area, lead.city].filter(Boolean).join(', ')} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <NumberField label="System size (kW)" name="kw" decimals min={1} required defaultValue={site.targetKw as number | undefined} />
                   <TextField label="Visit date & time" name="scheduledAt" type="datetime-local" />

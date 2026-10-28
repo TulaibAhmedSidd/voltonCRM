@@ -78,6 +78,11 @@ export async function ingestLead(input: IngestInput): Promise<IngestResult> {
       contact = await Contact.findOne({ phones: phone })
       if (!contact) throw error
     }
+  } else {
+    // Known customer: fill in details we did not have yet (never overwrite what is saved).
+    const known = { email: contact.email, city: contact.city, area: contact.area, address: contact.address }
+    const fill = Object.fromEntries((['email', 'city', 'area', 'address'] as const).filter((k) => input[k]?.trim() && !known[k]?.trim()).map((k) => [k, input[k]!.trim()]))
+    if (Object.keys(fill).length) await Contact.updateOne({ _id: contact._id }, { $set: fill })
   }
 
   const open = await Lead.findOne({ contactId: contact._id, departmentId: dept?._id ?? null, status: 'open', deletedAt: null }).lean()

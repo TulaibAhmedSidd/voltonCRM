@@ -35,6 +35,7 @@ export function makeFixtures(now: Date) {
     altPhones: ['+923009998877'],
     city: 'Lahore',
     area: 'DHA Phase 6',
+    addresses: [{ label: 'Address', value: 'House 12, Street 4, DHA Phase 6, Lahore' }],
     campaignName: 'Solar Home Oct',
     adName: 'Zero bill video',
     ctwaHeadline: 'Get a 10 kW system with zero electricity bill',

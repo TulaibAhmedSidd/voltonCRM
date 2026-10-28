@@ -1226,12 +1226,13 @@ export async function getLeadDetailsAction(leadId: string): Promise<LeadDetailsV
   try {
     const lead = await loadLeadFor(user, leadId, 'view')
     if (user.role === 'agent' && lead.assignment?.state !== 'accepted') return { ok: false, message: 'Accept the lead to see all its details.' }
-    const contact = await Contact.findById(lead.contactId).select('name').lean()
+    const contact = await Contact.findById(lead.contactId).select('name address area city').lean()
     const site = (lead.site ?? {}) as { systemSizeRange?: string; installLocation?: string; installTimeline?: string }
     const src = lead.source ?? {}
     const facts: [string, string][] = (
       [
         ['Received', formatPktDateTime(lead.receivedAt)],
+        ['Address', [contact?.address, contact?.area, contact?.city].filter(Boolean).join(', ')],
         ['Came from', src.channel === 'sheet' ? `Google Sheet${src.sheetTab ? ` · tab ${String(src.sheetTab).split('/').pop()}` : ''}${src.sheetRow ? ` · row ${src.sheetRow}` : ''}` : String(src.channel ?? '')],
         ['Campaign', src.campaignName],
         ['Ad set', src.adsetName],

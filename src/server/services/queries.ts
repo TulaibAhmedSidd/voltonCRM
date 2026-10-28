@@ -12,6 +12,7 @@ import { isAdminRole, leadScope, visitScope } from '@/server/auth/scope'
 import { oid } from '@/server/services/common'
 import { queueReport } from '@/server/services/assignment'
 import { websiteAccessOf } from '@/domain/website'
+import { leadAddresses } from '@/domain/sheet-columns'
 
 const iso = (d?: Date | null) => (d ? new Date(d).toISOString() : undefined)
 
@@ -418,6 +419,7 @@ export async function getLeadDetail(id: string, user: SessionUser) {
     altPhones: summary.maskPhone ? [] : (contact?.phones?.slice(1) ?? []),
     city: contact?.city ?? undefined,
     area: contact?.area ?? undefined,
+    addresses: summary.maskPhone ? [] : leadAddresses(contact?.address, lead.extra as Record<string, unknown> | undefined),
     campaignName: lead.source?.campaignName ?? undefined,
     adName: lead.source?.adName ?? undefined,
     formName: lead.source?.formName ?? undefined,

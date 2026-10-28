@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRowKey, detectColumns, mapSheetRow, normalizeHeader, routeDepartment } from '@/domain/sheet-columns'
+import { buildRowKey, detectColumns, leadAddresses, mapSheetRow, normalizeHeader, routeDepartment } from '@/domain/sheet-columns'
 
 const META_HEADERS = ['id', 'created_time', 'ad_name', 'campaign_name', 'form_name', 'platform', 'full_name', 'phone_number', 'city', 'what_is_your_monthly_electricity_bill?', 'roof_photo_link']
 
@@ -61,5 +61,27 @@ describe('routing and row keys', () => {
     const a = buildRowKey({ tab: 'Leads', phone: '+923001234567', submittedAt: '2026-10-04' })
     expect(a).toBe(buildRowKey({ tab: 'Leads', phone: '+923001234567', submittedAt: '2026-10-04' }))
     expect(a).not.toBe(buildRowKey({ tab: 'Other', phone: '+923001234567', submittedAt: '2026-10-04' }))
+  })
+})
+
+describe('address columns', () => {
+  it('reads "Residential Address" / "Current Address" / long questions as the address, never an e-mail column', () => {
+    expect(detectColumns(['Phone', 'Residential Address']).mapping['Residential Address']).toBe('address')
+    expect(detectColumns(['Phone', 'Current Address']).mapping['Current Address']).toBe('address')
+    expect(detectColumns(['Phone', 'What is your complete home address?']).mapping['What is your complete home address?']).toBe('address')
+    const both = detectColumns(['Phone', 'Email Address', 'Residential Address', 'Current Address'])
+    expect(both.mapping['Email Address']).toBe('email')
+    expect(both.mapping['Residential Address']).toBe('address')
+    expect(both.dynamic).toContain('Current Address')
+  })
+
+  it('shows the saved address first, then other address columns by their own name, each text once', () => {
+    expect(leadAddresses('House 5, Block 13, Gulshan', { 'Current Address': 'Flat 2, PECHS', 'Email Address': 'a@b.com', 'Residential Address': 'house 5, block 13, gulshan' })).toEqual([
+      { label: 'Address', value: 'House 5, Block 13, Gulshan' },
+      { label: 'Current Address', value: 'Flat 2, PECHS' },
+    ])
+    // Old lead: the address only sits in the Sheet columns.
+    expect(leadAddresses('', { 'Residential Address': 'House 9, DHA' })).toEqual([{ label: 'Address', value: 'House 9, DHA' }])
+    expect(leadAddresses(null, {})).toEqual([])
   })
 })
