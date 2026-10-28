@@ -59,6 +59,7 @@ erDiagram
 | `messages` | waMessageId, contactId, leadId, numberId, direction, type, text, mediaStorageKey, sentFrom, sentByUserId, status, at | waMessageId unique; {contactId, at}; {leadId, at} |
 | `settings` | key, value, updatedBy | key unique |
 | `ingestevents` | source, idempotencyKey, payload, status, error, receivedAt | idempotencyKey unique; TTL 30 days |
+| `savedquotations` | name, fingerprint (sha256 of the setup; `deleted:<id>` once removed), departmentId (null = company-wide), input (QuotationInput without the customer note), systemType, systemKw, subtotal, discount, total, madeBy {userId, name, role}, sourceQuotationId/No (null = saved by hand), useCount, lastUsedAt, lastUsedBy, deletedAt — kept from every quotation, one per setup per department | {departmentId, fingerprint} unique; {deletedAt, updatedAt} |
 | `counters` | _id (lead/quotation/sale), seq — `nextSequence(name)` | — |
 
 Later (phases 3–4): products, price_history, quotations (items + price snapshot embedded, one doc per version), site_surveys, sales, payments, commissions, commission_rules, targets, campaigns.

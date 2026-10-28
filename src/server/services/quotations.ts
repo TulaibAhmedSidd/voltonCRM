@@ -1,7 +1,7 @@
 import 'server-only'
 import { formatQuotationNo, COUNTERS } from '@/domain/numbering'
 import { STAGES, type Stage, type QuotationStatus } from '@/domain/constants'
-import { quotationInput, quotationLines, type QuotationInput } from '@/domain/quotation'
+import { QUOTE_ROLE_TITLE, quotationInput, quotationLines, type QuotationInput } from '@/domain/quotation'
 import { loadLeadFor, isObjectId } from '@/server/auth/guards'
 import type { SessionUser } from '@/server/auth/session'
 import { isAdminRole, leadScope } from '@/server/auth/scope'
@@ -9,15 +9,10 @@ import { connectDb } from '@/server/db/connection'
 import { AuditLog, Contact, Lead, Quotation, User, nextSequence } from '@/server/db/models'
 import { logActivity, oid, UserError } from '@/server/services/common'
 import { normalizePhone } from '@/lib/phone'
+import { rememberQuotationSetup } from '@/server/services/saved-quotations'
 
 const DAY = 86_400_000
-const ROLE_TITLE: Record<string, string> = {
-  agent: 'Sales Consultant',
-  manager: 'Sales Manager',
-  admin: 'Manager',
-  super_admin: 'Director',
-  field_agent: 'Site Engineer',
-}
+const ROLE_TITLE = QUOTE_ROLE_TITLE
 
 export interface QuotationSummary {
   id: string
@@ -50,6 +45,15 @@ export interface CentralQuotationItem {
   status: QuotationStatus
   issuedAt: string
   validUntil: string
+}
+
+/** Every quotation also lands in Saved quotations (or counts a use of the same setup) — that never stops the quotation. */
+async function keepSetup(user: SessionUser, input: QuotationInput, q: { _id: unknown; quotationNo: string; departmentId?: unknown }) {
+  try {
+    await rememberQuotationSetup(user, input, { id: String(q._id), quotationNo: q.quotationNo, departmentId: q.departmentId ?? null })
+  } catch (e) {
+    console.error('saved quotation not kept:', e instanceof Error ? e.message : e)
+  }
 }
 
 /** Issue a quotation for a lead: validates, numbers it (VO-1001…), saves a snapshot, logs it, optionally moves the stage. */
@@ -101,6 +105,7 @@ export async function createQuotation(
     issuedAt,
     validUntil: new Date(issuedAt.getTime() + input.validityDays * DAY),
   })
+  await keepSetup(user, input, quotation)
   await logActivity(lead._id, 'quotation_issued', user.id, {
     text: `${quotation.quotationNo} · Rs ${total.toLocaleString('en-US')} · ${input.systemKw} kW`,
   })
@@ -172,6 +177,7 @@ export async function createStandaloneQuotation(
     issuedAt,
     validUntil: new Date(issuedAt.getTime() + input.validityDays * DAY),
   })
+  await keepSetup(user, input, quotation)
 
   return { id: String(quotation._id), quotationNo: quotation.quotationNo, total }
 }

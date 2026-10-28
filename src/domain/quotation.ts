@@ -16,6 +16,15 @@ export const QUOTE_TEMPLATE_HINT: Record<QuoteTemplate, string> = {
   modern: 'One–two page branded quotation with system summary, terms and signature.',
 }
 
+/** The title under "Prepared by" on the PDF. */
+export const QUOTE_ROLE_TITLE: Record<string, string> = {
+  agent: 'Sales Consultant',
+  manager: 'Sales Manager',
+  admin: 'Manager',
+  super_admin: 'Director',
+  field_agent: 'Site Engineer',
+}
+
 export const QUOTE_SYSTEM_TYPES = ['on_grid', 'hybrid', 'off_grid'] as const
 export type QuoteSystemType = (typeof QUOTE_SYSTEM_TYPES)[number]
 export const QUOTE_SYSTEM_LABEL: Record<QuoteSystemType, string> = { on_grid: 'On-Grid', hybrid: 'Hybrid', off_grid: 'Off-Grid' }
@@ -224,3 +233,23 @@ export function rupeesInWords(amount: number): string {
 
 /** "1,202,800" */
 export const formatRs = (n: number) => Math.round(n).toLocaleString('en-US')
+
+/** What a saved quotation keeps: the whole form except the note written for one customer. */
+export function savedQuotationSetup(q: QuotationInput): QuotationInput {
+  return { ...q, notes: '' }
+}
+
+/** "10 kW Hybrid · 16 × LONGi Hi-MO X10 645W · GoodWe 12kW SP · Rs 777,000" — the name a saved quotation gets. */
+export function savedQuotationName(q: QuotationInput): string {
+  const { total } = quotationLines(q)
+  return [
+    `${q.systemKw ? `${q.systemKw} kW ` : ''}${QUOTE_SYSTEM_LABEL[q.systemType]}`,
+    q.panelQty && q.panelModel ? `${q.panelQty} × ${q.panelModel}` : q.panelModel,
+    q.inverterModel,
+    q.batteryQty && q.batteryModel ? `${q.batteryQty} × ${q.batteryModel}` : '',
+    `Rs ${formatRs(total)}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+    .slice(0, 160)
+}

@@ -7,7 +7,7 @@ export * from '@/server/db/models/work'
 
 import { Attendance, Department, Session, Team, User } from '@/server/db/models/org'
 import { Activity, Contact, ContactAttempt, FollowUp, Lead, LeadAssignment, Visit } from '@/server/db/models/leads'
-import { Quotation } from '@/server/db/models/quotations'
+import { Quotation, SavedQuotation } from '@/server/db/models/quotations'
 import { Erasure } from '@/server/db/models/erasures'
 import { Instruction, JobRole } from '@/server/db/models/work'
 import {
@@ -39,6 +39,7 @@ export const ALL_MODELS = [
   Lead,
   LeadAssignment,
   Quotation,
+  SavedQuotation,
   Erasure,
   JobRole,
   Instruction,

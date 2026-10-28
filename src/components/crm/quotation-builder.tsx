@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
-import { Download, FileText, Plus, Send, Share2, Trash2 } from 'lucide-react'
+import { BookmarkPlus, Download, FileText, Plus, Send, Share2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   BATTERY_SUGGESTIONS,
@@ -20,9 +20,10 @@ import {
   type QuotationInput,
 } from '@/domain/quotation'
 import type { CatalogItem, WebsiteCatalog } from '@/domain/website'
-import { createQuotationAction, createStandaloneQuotationAction, sendQuotationWhatsAppAction } from '@/server/actions'
+import { createQuotationAction, createStandaloneQuotationAction, saveQuotationSetupAction, sendQuotationWhatsAppAction } from '@/server/actions'
 import { QuotationWhatsAppButton } from '@/components/crm/quotation-whatsapp-button'
 import { QuotationManagerButton } from '@/components/crm/quotation-manager-button'
+import { SavedQuotationPicker } from '@/components/crm/saved-quotation-picker'
 import { defaultQuotation } from '@/domain/quotation'
 import { cn } from '@/lib/utils'
 import { NumberInput } from '@/components/common/number-input'
@@ -204,6 +205,11 @@ export function QuotationBuilder({
   const [pending, start] = useTransition()
   const [result, setResult] = useState<{ ok: boolean; message?: string; quotationId?: string; quotationNo?: string } | null>(null)
   const totals = useMemo(() => quotationLines(q), [q])
+  // Saved quotations: the list reloads after a save or a new quotation (both land there).
+  const [savedKey, setSavedKey] = useState(0)
+  const [saveName, setSaveName] = useState('')
+  const [saving, startSave] = useTransition()
+  const [saveResult, setSaveResult] = useState<{ ok: boolean; message?: string } | null>(null)
 
   const [custName, setCustName] = useState(customer.name || '')
   const [custPhone, setCustPhone] = useState(customer.phone || '')
@@ -240,10 +246,21 @@ export function QuotationBuilder({
           markSent,
         })
         setResult(r)
+        if (r?.ok) setSavedKey((k) => k + 1)
       } else {
         const r = await createQuotationAction({ leadId, quotation: q, markSent })
         setResult(r)
+        if (r?.ok) setSavedKey((k) => k + 1)
       }
+    })
+  }
+
+  function saveSetup() {
+    setSaveResult(null)
+    startSave(async () => {
+      const r = await saveQuotationSetupAction({ quotation: q, name: saveName.trim() || undefined })
+      setSaveResult(r)
+      if (r?.ok) setSavedKey((k) => k + 1)
     })
   }
 
@@ -353,6 +370,14 @@ export function QuotationBuilder({
               </Field>
             </fieldset>
           )}
+          <SavedQuotationPicker
+            refreshKey={savedKey}
+            onPick={(input) => {
+              setQ(input)
+              setResult(null)
+            }}
+          />
+
           <datalist id="q-panels">{withSite(PANEL_SUGGESTIONS, site.panels).map((s) => <option key={s} value={s} />)}</datalist>
           <datalist id="q-inverters">{withSite(INVERTER_SUGGESTIONS, site.inverters).map((s) => <option key={s} value={s} />)}</datalist>
           <datalist id="q-batteries">{withSite(BATTERY_SUGGESTIONS, site.batteries).map((s) => <option key={s} value={s} />)}</datalist>
@@ -551,6 +576,28 @@ export function QuotationBuilder({
               <textarea rows={2} value={q.notes} onChange={(e) => set('notes', e.target.value)} className="w-full rounded-lg border border-input bg-card p-3 text-base md:text-sm" />
             </Field>
           </Section>
+
+          <fieldset className="space-y-2 rounded-xl p-3 ring-1 ring-foreground/10">
+            <legend className="flex items-center gap-2 px-1 text-sm font-semibold">
+              <BookmarkPlus className="size-4" aria-hidden />
+              Save for next time (optional)
+            </legend>
+            <p className="text-xs text-muted-foreground">Quotations you make are saved automatically. Save here to keep a setup without making a quotation — the customer and the note are not saved.</p>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <Field label="Name (optional)">
+                <input value={saveName} onChange={(e) => setSaveName(e.target.value)} maxLength={160} placeholder="e.g. 10 kW Hybrid — LONGi + GoodWe, DHA rooftop" className={control} />
+              </Field>
+              <Button type="button" variant="outline" size="touch" className="self-end" disabled={saving || totals.total <= 0} onClick={saveSetup}>
+                <BookmarkPlus aria-hidden />
+                {saving ? 'Saving…' : 'Save this setup'}
+              </Button>
+            </div>
+            {saveResult?.message ? (
+              <p role="status" className={cn('rounded-lg px-3 py-2 text-xs', saveResult.ok ? 'bg-tone-success-soft text-tone-success-soft-foreground' : 'bg-tone-danger-soft text-tone-danger-soft-foreground')}>
+                {saveResult.message}
+              </p>
+            ) : null}
+          </fieldset>
 
           <div className="sticky bottom-0 z-10 space-y-2 rounded-xl bg-card p-3 shadow-lg ring-1 ring-foreground/10">
             <div className="grid gap-3 sm:grid-cols-[1fr_12rem]">

@@ -43,6 +43,7 @@ import { createInstruction, createJobRole, deleteJobRole, resolveJobRole, update
 import { buildQuotationPdf, templateOf } from '@/server/services/quotation-pdf'
 import { quotationInput, formatRs } from '@/domain/quotation'
 import { managerFor } from '@/server/services/manager-contact'
+import { deleteSavedQuotation, saveQuotationSetup } from '@/server/services/saved-quotations'
 import { WEBSITE_ACCESS, WEBSITE_ACCESS_LABEL, websiteAccessEditable } from '@/domain/website'
 import { removePushSubscription, savePushSubscription, sendPush } from '@/server/services/push'
 import { isHexColor, THEME_PRESETS } from '@/styles/runtime-theme'
@@ -1465,6 +1466,32 @@ export async function createStandaloneQuotationAction(input: {
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : 'Failed to create quotation' }
   }
+}
+
+/** Quotation form → "Save for next time": keep the setup (without the customer) in Saved quotations. */
+export async function saveQuotationSetupAction(input: { quotation: unknown; name?: string }): Promise<(ActionState & { id?: string }) | null> {
+  const user = await requireUser()
+  try {
+    if ((await hit(`saved-quote:${user.id}`, 60, 60 * 60_000)).blocked) return { ok: false, message: 'Too many saves in an hour — wait a little' }
+    const name = typeof input?.name === 'string' ? input.name : undefined
+    const r = await saveQuotationSetup(user, input?.quotation, name)
+    revalidatePath('/quotations')
+    return { ok: true, id: r.id, message: r.existed ? `Already saved as “${r.name}”.` : `Saved as “${r.name}”. Pick it next time from “Start from a saved quotation”.` }
+  } catch (error) {
+    if (isRedirect(error)) throw error
+    return errorState(error)
+  }
+}
+
+/** Quotations → Saved → Remove (the person who saved it, their manager, or an admin). */
+export async function deleteSavedQuotationAction(id: string): Promise<ActionState> {
+  const user = await requireUser()
+  return attempt(async () => {
+    if (typeof id !== 'string') throw new UserError('Saved quotation not found')
+    await deleteSavedQuotation(user, id)
+    revalidatePath('/quotations')
+    return { ok: true, message: 'Saved quotation removed' }
+  })
 }
 
 export async function updateQuotationStatusAction(_prev: ActionState, fd: FormData): Promise<ActionState> {

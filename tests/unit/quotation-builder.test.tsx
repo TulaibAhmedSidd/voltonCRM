@@ -46,3 +46,31 @@ describe('QuotationBuilder', () => {
     expect(screen.queryByRole('button', { name: /Generate quotation PDF/ })).not.toBeInTheDocument()
   })
 })
+
+describe('Start from a saved quotation', () => {
+  it('lists saved quotations and fills the whole form from the one picked', async () => {
+    const saved = { ...defaultQuotation(6), panelQty: 10, panelPrice: 25_000, inverterModel: 'iTel 6kW Pro Hybrid IP54', inverterPrice: 210_000 }
+    const fetchMock = vi.fn(async (url: string) =>
+      new Response(
+        JSON.stringify(
+          url.endsWith('/api/quotations/saved')
+            ? { rows: [{ id: 's1', name: 'Gulshan 6 kW standard', madeBy: 'Asad', useCount: 3 }] }
+            : { saved: { id: 's1', name: 'Gulshan 6 kW standard', input: saved } },
+        ),
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      render(<QuotationBuilder leadId="lead1" initial={defaultQuotation(10)} quotations={[]} canCreate customer={{ name: 'Ali', phone: '+923001234567' }} />)
+      const picker = await screen.findByRole('combobox', { name: /^Saved quotation/ })
+      await waitFor(() => expect(screen.getByRole('option', { name: /Gulshan 6 kW standard — by Asad · used 3×/ })).toBeInTheDocument())
+      fireEvent.change(picker, { target: { value: 's1' } })
+      // 10 × 25,000 + 210,000 + structure 20,000 + wiring 35,000 + labour 40,000
+      expect(await screen.findByText('Total Rs 555,000')).toBeInTheDocument()
+      expect(screen.getByText(/Filled from “Gulshan 6 kW standard”/)).toBeInTheDocument()
+      expect(fetchMock).toHaveBeenCalledWith('/api/quotations/saved/s1', { cache: 'no-store' })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+})

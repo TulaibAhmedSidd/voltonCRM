@@ -56,7 +56,7 @@ async function syncToExternalBackupDb(): Promise<void> {
       'ingestevents', 'activities', 'attendances', 'quotations', 'documents',
       'contactattempts', 'leads', 'departments', 'notifications', 'instructions',
       'teams', 'whatsappnumbers', 'jobroles', 'settings', 'leadassignments',
-      'counters', 'sheetrows', 'contacts', 'user'
+      'counters', 'sheetrows', 'contacts', 'user', 'savedquotations'
     ]
 
     for (const colName of collections) {

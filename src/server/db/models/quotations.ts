@@ -1,6 +1,6 @@
 import { Schema, type InferSchemaType } from 'mongoose'
 import { DEFAULT_QUOTATION_STATUS, QUOTATION_STATUSES } from '@/domain/constants'
-import { defineModel } from '@/server/db/plugins'
+import { auditFields, defineModel, softDelete } from '@/server/db/plugins'
 
 const { ObjectId, Mixed } = Schema.Types
 
@@ -44,3 +44,42 @@ quotationSchema.index({ status: 1, issuedAt: -1 })
 
 export const Quotation = defineModel('Quotation', quotationSchema)
 export type QuotationDoc = InferSchemaType<typeof quotationSchema>
+
+/**
+ * A saved quotation: the filled form without the customer. Kept automatically every time a quotation is made (one per
+ * identical setup per department; the same setup again only counts a use), or saved by hand from the form, so the next
+ * customer who wants the same system starts from it.
+ */
+const savedQuotationSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 160 },
+    /** sha256 of the setup. Set to "deleted:<id>" when removed, so the same setup can be saved again. */
+    fingerprint: { type: String, required: true },
+    departmentId: { type: ObjectId, ref: 'Department', default: null },
+    /** QuotationInput without the customer note */
+    input: { type: Mixed, required: true },
+    systemType: { type: String, default: '' },
+    systemKw: { type: Number, default: 0 },
+    subtotal: { type: Number, required: true },
+    discount: { type: Number, default: 0 },
+    total: { type: Number, required: true },
+    madeBy: {
+      userId: { type: ObjectId, ref: 'User', required: true },
+      name: { type: String, required: true },
+      role: { type: String, default: '' },
+    },
+    sourceQuotationId: { type: ObjectId, ref: 'Quotation', default: null },
+    sourceQuotationNo: { type: String, default: null },
+    useCount: { type: Number, default: 0 },
+    lastUsedAt: { type: Date, default: null },
+    lastUsedBy: { type: String, default: null },
+  },
+  { timestamps: true },
+)
+auditFields(savedQuotationSchema)
+softDelete(savedQuotationSchema)
+savedQuotationSchema.index({ departmentId: 1, fingerprint: 1 }, { unique: true })
+savedQuotationSchema.index({ deletedAt: 1, updatedAt: -1 })
+
+export const SavedQuotation = defineModel('SavedQuotation', savedQuotationSchema)
+export type SavedQuotationDoc = InferSchemaType<typeof savedQuotationSchema>

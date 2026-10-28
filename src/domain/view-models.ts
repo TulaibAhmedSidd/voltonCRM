@@ -23,6 +23,7 @@ import type {
   Role,
   Stage,
 } from '@/domain/constants'
+import type { QuotationInput } from '@/domain/quotation'
 
 export interface AgentRef {
   id: string
@@ -151,4 +152,27 @@ export interface KpiItem {
   value: string | number
   hint?: string
   comingIn?: number
+}
+
+/** A saved quotation (Quotations → Saved, and "Start from a saved quotation" in the quotation form). */
+export interface SavedQuotationItem {
+  id: string
+  name: string
+  systemType: string
+  systemKw: number
+  total: number
+  madeBy: string
+  madeAt: string
+  /** The quotation it was first saved from (VO-1023), or null when saved by hand. */
+  sourceQuotationNo: string | null
+  /** Quotations made with exactly this setup. */
+  useCount: number
+  lastUsedAt: string | null
+  lastUsedBy: string | null
+  /** The viewer saved it, manages its department, or is an admin. */
+  canDelete: boolean
+}
+
+export interface SavedQuotationDetail extends SavedQuotationItem {
+  input: QuotationInput
 }
